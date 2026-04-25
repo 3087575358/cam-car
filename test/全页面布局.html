@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>按钮矩阵布局</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            background: #1a1a2e;
+        }
+
+        /* 主容器 */
+        .main-container {
+            position: fixed;
+            bottom: 5vw;
+            left: 00;
+            width: 90vw;
+            height: 25vw;
+            pointer-events: none;
+            background-color: rgba(0,256,0,0.2);
+            border-radius: 5%;
+        }
+
+        /* 按钮容器基础 */
+        .button-container {
+            position: absolute;
+            bottom: 0;
+            height: 25vw;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5vw 0;
+            pointer-events: auto;
+        }
+
+        /* 容器1: 10vw宽 @ 0vw */
+        .container-1 {
+            left: 0vw;
+            width: 10vw;
+        }
+
+        /* 容器2: 20vw宽 @ 20vw - WASD键盘布局 */
+        .container-2 {
+            left: 20vw;
+            width: 20vw;
+            /* 改为3行布局 */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 0.5vw;
+            padding: 0.5vw;
+        }
+
+        /* WASD布局专用样式 */
+        .wasd-row {
+            display: flex;
+            justify-content: center;
+            gap: 0.5vw;
+            width: 100%;
+        }
+
+        .wasd-row button {
+            width: 6vw !important;      /* 正方形按键 */
+            height: 6vw !important;
+            font-size: 2vw !important;
+            font-weight: bold;
+            background: #1890ff !important;
+        }
+
+        .wasd-row button:hover {
+            background: #40a9ff !important;
+        }
+
+        /* 容器3: 20vw宽 @ 60vw */
+        .container-3 {
+            left: 60vw;
+            width: 20vw;
+        }
+
+        /* 容器4: 10vw宽 @ 90vw */
+        .container-4 {
+            left: 90vw;
+            width: 10vw;
+        }
+
+        /* 普通按钮样式 */
+        .button-container button {
+            height: 4vw;
+            width: 50%;
+            border: none;
+            border-radius: 0.5vw;
+            cursor: pointer;
+            color: #fff;
+            background: #ff3034;
+            font-size: 1.2vw;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            transition: all 0.3s ease;
+            box-shadow: 0 0.2vw 0.4vw rgba(0,0,0,0.3);
+        }
+
+        .button-container button:hover {
+            background: #e62e2e;
+            transform: scale(1.05);
+            box-shadow: 0 0.4vw 0.8vw rgba(0,0,0,0.5);
+        }
+
+        /* 颜色区分 */
+        .container-3 button { background: #52c41a; }
+        .container-3 button:hover { background: #73d13d; }
+        
+        .container-4 button { background: #faad14; }
+        .container-4 button:hover { background: #ffc53d; }
+
+        /* 调试 */
+        .debug .button-container {
+            outline: 1px dashed rgba(255,255,255,0.3);
+        }
+    </style>
+</head>
+<body class="debug">
+    <div class="main-container">
+        <!-- 容器1: 普通垂直排列 -->
+        <div class="button-container container-1">
+            <button>B1-1</button>
+            <button>B1-2</button>
+            <button>B1-3</button>
+            <button>B1-4</button>
+            <button>B1-5</button>
+        </div>
+
+        <!-- 容器2: WASD键盘布局 -->
+        <div class="button-container container-2">
+            <!-- W 键（上） -->
+            <div class="wasd-row">
+                <button>W</button>
+            </div>
+            <!-- A S D 键（下排） -->
+            <div class="wasd-row">
+                <button>A</button>
+                <button>S</button>
+                <button>D</button>
+            </div>
+        </div>
+
+        <!-- 容器3: 普通垂直排列 -->
+        <div class="button-container container-3">
+            <button>B3-1</button>
+            <button>B3-2</button>
+            <button>B3-3</button>
+            <button>B3-4</button>
+            <button>B3-5</button>
+        </div>
+
+        <!-- 容器4: 普通垂直排列 -->
+        <div class="button-container container-4">
+            <button>B4-1</button>
+            <button>B4-2</button>
+            <button>B4-3</button>
+            <button>B4-4</button>
+            <button>B4-5</button>
+        </div>
+    </div>
+</body>
+</html>

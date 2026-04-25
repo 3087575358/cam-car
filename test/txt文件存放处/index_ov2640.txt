@@ -1,0 +1,1373 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <!-- 文件编码方式 -->
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <!-- meta是无标签元素，viewport即网页视窗（窗口）-->
+        <!-- content中的device-width意为适应屏幕窗口宽度进行显示与后续操作，initial-scale=1原始缩放大小为1，可以加一个判断语句根据手机或者电脑的设备类型判定来进行缩放显示全部内容-->
+        <title>ESP32 OV2460</title>
+        <!-- 网页标签上显示的名字 -->
+        <style>
+
+          /* 
+            我们首先明确css的基本语法：作为纯标注性质的描述语言，css定义的所有内容都是
+            元素:对象名/多个对象名;
+              name:parameters; 
+            的类似形式，例如
+              font-family: Arial,Helvetica,sans-serif;
+              color: #FFFF00;
+              font-size: 18px
+          */
+
+          /* 
+            其次就是每个总集开头的大类
+            其定义的内容
+            它既可以是html自带的一些内容（用于告诉浏览器你要显示的字体，图片，颜色的尺寸样式等等）
+              例如
+              body{}; 页面选用背景设计等信息
+              meta{}; 第4行：网页编码与缩放等等
+            也可以是你自己定义的一些后面要用于特殊文本与图片动画等等内容要调用的信息
+              例如320行附近的
+              .switch {};
+              .switch input {}; 用于定义2值选择开关的外观信息
+
+            其定义的格式有三种，按照优先级，分别是
+                #quote { color: red; }    权重：ID选择器，此条最终生效
+                .text { color: blue; }    权重：类选择器，此条胜出
+                p { color: black; }       权重：元素选择器
+              例如有一个元素，定义为
+              color：<p id="quote" class="text">
+              按照ID>类>元素的优先级，其应该显示为#quote的red
+          */
+            body {
+                font-family: Arial,Helvetica,sans-serif;/*mac上没有Arial字体*/
+                background: rgb(00, 00, 00);/*背景颜色，rgb函数定义颜色*/
+                color: #FFFFFF;/*字体颜色，实际上的输出就是# + 十进制转十六进制*/
+                font-size: 16px/*字体的线条宽度的像素大小*/
+            }
+
+            h2 {
+                font-family: Arial,Helvetica,sans-serif;
+                color: #FFFF00;
+                font-size: 18px
+            }
+            /* head-2，二级标题 */
+
+            section.main {
+                display: flex
+            }
+
+            #menu,section.main {
+                flex-direction: column;
+                justify-content: flex-start; /* 主轴（垂直）起始位置对齐 */
+                align-items: stretch;         /* 交叉轴（水平）拉伸对齐 */
+                flex-wrap: nowrap;           /* 元素在行显示溢出时，不换行 */
+                gap: 4px;                    /* 子元素间统一间距为8像素 */
+                padding: 12px;               /* 容器内边距 */
+            }
+
+            #menu {
+                display: none; 
+                flex-wrap: wrap;
+                min-width: 100px;
+                background: #363636;
+                padding: 8px;
+                border-radius: 4px;
+                margin-top: -10px;
+                margin-right: 10px;
+            }
+
+            #content {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: stretch
+            }
+            /* 26-54行定义主菜单和菜单里面的内容的格式 */
+
+            figure {
+                padding: 0px;
+                margin: 0;
+                -webkit-margin-before: 0;
+                margin-block-start: 0;
+                -webkit-margin-after: 0;
+                margin-block-end: 0;
+                -webkit-margin-start: 0;
+                margin-inline-start: 0;
+                -webkit-margin-end: 0;
+                margin-inline-end: 0;
+                /* 新增居中属性 */
+                /* display: flex;           将figure变为flex容器
+                justify-content: center; 水平居中子元素
+                align-items: center;     垂直居中子元素 */
+                /* 不确定flexbox是否适用于非文本框，尝试取消注释查看效果 */
+            }
+
+            figure img {
+                display: block;
+                width: 100%;
+                height: auto;
+                border-radius: 4px;
+                margin-top: 8px;
+            }
+            /* 定义图像显示的默认框区位置和大小，以及边框大小 */
+
+            /* 同上，视频传输的chunk流位置及边框定义 */
+            /* 注意min-width: 800px，所以必须用像素宽度大于等于800px的屏幕时才会执行下面的布局，把视频框放在菜单栏的右边 */
+            /* 如果条件不满足，则会按照flex的顺序排序显示在菜单栏的下面 */
+            @media (min-width: 800px) and (orientation:landscape) {
+                #content {
+                    display:flex;
+                    flex-wrap: nowrap;
+                    align-items: stretch;
+                    background: black;
+                }
+
+                figure img {
+                    display: block;
+                    max-width: 100%;
+                    max-height: calc(100vh - 40px);
+                    /* vh means 100 percent of viewport height, minus 40 px to display the full img */
+                    width: auto;
+                    height: auto
+                }
+
+                figure {
+                    padding: 0 0 0 0px;
+                    margin: 0;
+                    -webkit-margin-before: 0;
+                    margin-block-start: 0;
+                    -webkit-margin-after: 0;
+                    margin-block-end: 0;
+                    -webkit-margin-start: 0;
+                    margin-inline-start: 0;
+                    -webkit-margin-end: 0;
+                    margin-inline-end: 0
+                }
+            }
+
+            section#buttons {
+                display: flex;
+                flex-wrap: nowrap;
+                justify-content: space-between
+                /* justice正义，justify正当辩护，两端对齐 */
+            }
+
+            #nav-toggle {
+                cursor: pointer;
+                display: block
+            }
+
+            #nav-toggle-cb {
+                outline: 0;
+                opacity: 0;
+                width: 0;
+                height: 0
+            }
+
+            #nav-toggle-cb:checked+#menu {
+                display: flex
+            }
+
+            .input-group {
+                display: flex;
+                flex-wrap: nowrap;
+                line-height: 22px;
+                margin: 5px 0
+            }
+
+            .input-group>label {
+                display: inline-block;
+                padding-right: 10px;
+                min-width: 47%
+            }
+
+            .input-group input,.input-group select {
+                flex-grow: 1
+            }
+
+            .range-max,.range-min {
+                display: inline-block;
+                padding: 0 5px
+            }
+
+            button, .button {     /*cursor,计算机英文翻译就是屏幕上的“光标”*/
+                display: block;
+                margin: 5px;
+                padding: 0 12px;
+                border: 0;
+                line-height: 28px;
+                cursor: pointer;    /*这里的意思是：当光标移动到是.button类上时，自动变为指针选择样式*/
+                color: #fff;
+                background: #ff3034;
+                border-radius: 5px;
+                font-size: 16px;
+                outline: 0
+            }
+
+            .save {
+                position: absolute;
+                right: 25px;
+                top: 0px;
+                height: 16px;
+                line-height: 16px;
+                padding: 0 4px;
+                text-decoration: none;
+                cursor: pointer
+            }
+
+            button:hover {
+                background: #ff494d
+            }
+
+            button:active {
+                background: #f21c21
+            }
+
+            button.disabled {
+                cursor: default;
+                background: #a0a0a0
+            }
+
+            input[type=range] {
+                appearance: none;
+                /*如果出现兼容性问题，注释掉上面那句话而改用下面这句 -webkit-appearance: none; */
+                width: 100%;
+                height: 22px;
+                background: #363636;
+                cursor: pointer;
+                margin: 0
+            }
+
+            input[type=range]:focus {
+                outline: 0
+            }
+
+            input[type=range]::-webkit-slider-runnable-track {
+                width: 100%;
+                height: 2px;
+                cursor: pointer;
+                background: #EFEFEF;
+                border-radius: 0;
+                border: 0 solid #EFEFEF
+            }
+
+            input[type=range]::-webkit-slider-thumb {
+                border: 1px solid rgba(0,0,30,0);
+                height: 22px;
+                width: 22px;
+                border-radius: 50px;
+                background: #ff3034;
+                cursor: pointer;
+                -webkit-appearance: none;
+                margin-top: -11.5px
+            }
+
+            input[type=range]:focus::-webkit-slider-runnable-track {
+                background: #EFEFEF
+            }
+
+            input[type=range]::-moz-range-track {
+                width: 100%;
+                height: 2px;
+                cursor: pointer;
+                background: #EFEFEF;
+                border-radius: 0;
+                border: 0 solid #EFEFEF
+            }
+
+            input[type=range]::-moz-range-thumb {
+                border: 1px solid rgba(0,0,30,0);
+                height: 22px;
+                width: 22px;
+                border-radius: 50px;
+                background: #ff3034;
+                cursor: pointer
+            }
+
+            input[type=range]::-ms-track {
+                width: 100%;
+                height: 2px;
+                cursor: pointer;
+                background: 0 0;
+                border-color: transparent;
+                color: transparent
+            }
+
+            input[type=range]::-ms-fill-lower {
+                background: #EFEFEF;
+                border: 0 solid #EFEFEF;
+                border-radius: 0
+            }
+
+            input[type=range]::-ms-fill-upper {
+                background: #EFEFEF;
+                border: 0 solid #EFEFEF;
+                border-radius: 0
+            }
+
+            input[type=range]::-ms-thumb {
+                border: 1px solid rgba(0,0,30,0);
+                height: 22px;
+                width: 22px;
+                border-radius: 50px;
+                background: #ff3034;
+                cursor: pointer;
+                height: 2px
+            }
+
+            input[type=range]:focus::-ms-fill-lower {
+                background: #EFEFEF
+            }
+
+            input[type=range]:focus::-ms-fill-upper {
+                background: #363636
+            }
+
+            .switch {
+                display: block;
+                position: relative;
+                line-height: 22px;
+                font-size: 16px;
+                height: 22px
+            }
+
+            .switch input {
+                outline: 0;
+                opacity: 0;
+                width: 0;
+                height: 0
+            }
+
+            .slider {
+                width: 50px;
+                height: 22px;
+                border-radius: 22px;
+                cursor: pointer;
+                background-color: grey
+            }
+
+            .slider,.slider:before {
+                display: inline-block;
+                transition: .4s
+            }
+
+            .slider:before {
+                position: relative;
+                content: "";
+                border-radius: 50%;
+                height: 16px;
+                width: 16px;
+                left: 4px;
+                top: 3px;
+                background-color: #fff
+            }
+
+            input:checked+.slider {
+                background-color: #5630ff
+            }
+
+            input:checked+.slider:before {
+                -webkit-transform: translateX(26px);
+                transform: translateX(26px)
+            }
+
+            select {
+                border: 1px solid #363636;
+                font-size: 14px;
+                height: 22px;
+                outline: 0;
+                border-radius: 5px
+            }
+
+            .image-container {
+                position: relative;
+                min-width: 160px
+            }
+
+            .close {
+                position: absolute;
+                right: 5px;
+                top: 5px;
+                background: #ff3034;
+                width: 16px;
+                height: 16px;
+                border-radius: 100px;
+                color: #fff;
+                text-align: center;
+                line-height: 18px;
+                cursor: pointer
+            }
+
+            .hidden {
+                display: none
+            }
+
+            input[type=text] {
+                border: 1px solid #363636;
+                font-size: 14px;
+                height: 20px;
+                margin: 1px;
+                outline: 0;
+                border-radius: 5px
+            }
+
+            .inline-button {
+                line-height: 20px;
+                margin: 2px;
+                padding: 1px 4px 2px 4px;
+            }
+
+            label.toggle-section-label {
+                cursor: pointer;
+                display: block
+            }
+
+            input.toggle-section-button {
+                outline: 0;
+                opacity: 0;
+                width: 0;
+                height: 0
+            }
+
+            input.toggle-section-button:checked+section.toggle-section {
+                display: none
+            }
+
+        </style>
+    </head>
+    <body>
+        <section class="main">
+
+            <div id="logo"><!--logo没有本地定义，不影响显示-->
+                <label for="nav-toggle-cb" id="nav-toggle">&#9875;OV2640 设置菜单</label>
+            </div>
+
+            <div id="content">
+                <div id="sidebar">
+                    <input type="checkbox" id="nav-toggle-cb" checked="checked">
+                    <nav id="menu">
+                        <section id="xclk-section" class="nothidden">
+                            <div class="input-group" id="set-xclk-group">
+
+                                <label for="set-xclk">相机传感器基频</label>
+
+                                <div class="text">
+                                  <label>XCLK</label>
+                                    <input id="xclk" type="text" minlength="1" maxlength="2" size="2" value="20">
+                                  <label>MHz</label>
+                                    <!-- 这里写的一坨屎，不限定/int输入，我写个 玉足 上去都行 -->
+                                </div>
+
+                                <button class="inline-button" id="set-xclk">设置</button>
+
+                            </div>
+                        </section>
+
+                        <div class="input-group" id="framesize-group">
+                            <label for="framesize">摄像头分辨率</label>
+                            <select id="framesize" class="default-action">
+                                <!-- 2MP -->
+                                <option value="13">UXGA(1600x1200)</option>
+                                <option value="12">SXGA(1280x1024)</option>
+                                <option value="11">HD(1280x720)</option>
+                                <option value="10">XGA(1024x768)</option>
+                                <option value="9">SVGA(800x600)</option>
+                                <option value="8">VGA(640x480)</option>
+                                <option value="7">HVGA(480x320)</option>
+                                <option value="6">CIF(400x296)</option>
+                                <option value="5">QVGA(320x240)</option>
+                                <option value="4">240x240</option>
+                                <option value="3">HQVGA(240x176)</option>
+                                <option value="2">QCIF(176x144)</option>
+                                <option value="1">QQVGA(160x120)</option>
+                                <option value="0">96x96</option>
+                            </select>
+                        </div>
+
+                        <div class="input-group" id="quality-group">
+                            <label for="quality">图片品质</label>
+                            <!-- quality如何影响图片品质，这里可以顺便复习一下 -->
+                            <!-- 
+                            JPEG压缩流程：
+                            1. 感光元件采集RGB -> 2. 转换至YCbCr色彩空间 -> 3. 分块进行DCT变换
+                            4. 量化：DCT系数 ÷ 量化表(LQT/CQT)对应值 -> 取整（关键有损步骤）
+                               品质参数(quality)控制量化表整体缩放：两个数值是反比例系数
+                               品质参数越低，表值越大，量化步长越大，丢弃信息越多
+                            5. 熵编码（Zigzag扫描、行程编码、霍夫曼编码）生成压缩数据
+                            
+                            JPEG解压流程（逆过程）：
+                            1. 熵解码 -> 2. 反量化：量化值 × 量化表 -> 近似恢复DCT系数（已损失精度）
+                            3. 逆DCT变换 -> 4. YCbCr转回RGB -> 5. 三原色叠加显示
+                            
+                            信息丢失发生在：量化时的取整操作（小数部分永久丢弃）及反量化时的近似恢复。
+                            重复压缩会导致“代际损失”，品质逐代下降。 
+                            -->
+                            <div class="range-min">4</div>
+                            <input type="range" id="quality" min="4" max="63" value="10" class="default-action">
+                            <div class="range-max">63</div>
+                        </div>
+
+                        <div class="input-group" id="brightness-group">
+                            <label for="brightness">亮度</label>
+                            <div class="range-min">-2</div>
+                            <input type="range" id="brightness" min="-2" max="2" value="0" class="default-action">
+                            <div class="range-max">2</div>
+                        </div>
+
+                        <div class="input-group" id="contrast-group">
+                            <label for="contrast">对比度</label>
+                            <div class="range-min">-2</div>
+                            <input type="range" id="contrast" min="-2" max="2" value="0" class="default-action">
+                            <div class="range-max">2</div>
+                        </div>
+                        
+                        <div class="input-group" id="saturation-group">
+                            <label for="saturation">饱和度</label>
+                            <div class="range-min">-2</div>
+                            <input type="range" id="saturation" min="-2" max="2" value="0" class="default-action">
+                            <div class="range-max">2</div>
+                        </div>
+
+                        <div class="input-group" id="special_effect-group">
+                            <label for="special_effect">查看三色通道值图像</label>
+                            <select id="special_effect" class="default-action">
+                                <option value="0" selected="selected">无效果</option>
+                                <option value="1">负片/颜色反转</option>
+                                <option value="2">黑白/灰度图</option>
+                                <option value="3">红通</option>
+                                <option value="4">绿通</option>
+                                <option value="5">蓝通</option>
+                                <option value="6">怀旧/棕褐色</option>
+                            </select>
+                        </div>
+
+                        <div class="input-group" id="zoom-scale-group">
+                            <label for="zoom-scale">图像缩放</label>
+                            <div class="range-min">1</div>
+                            <input type="range" id="zoom-scale" min="1" max="4" value="1" class="default-action">
+                            <div class="range-max">4</div>
+                        </div>
+
+                        <hr style="width:100%">
+
+                        <div class="input-group" id="awb-group">
+                            <label for="awb">白平衡</label>
+                            <!-- AWB Auto White Balance -->
+                            <div class="switch">
+                                <input id="awb" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="awb"></label>
+                            </div>
+                        </div>
+
+                        <div class="input-group" id="awb_gain-group">
+                            <label for="awb_gain" style="color: #ff9900; font-weight: bold;">白平衡增益算法调节</label>
+                            <!-- 这里用一个非标准写法，直接在label标签里面设置style样式 -->
+                            <div class="switch">
+                                <input id="awb_gain" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="awb_gain"></label>
+                            </div>
+                        </div>
+                        
+                        <div class="input-group" id="wb_mode-group">
+                            <label for="wb_mode">白平衡常见场景</label>
+                            <select id="wb_mode" class="default-action">
+                                <option value="0" selected="selected">自动识别</option>
+                                <option value="1">晴天</option>
+                                <option value="2">多云</option>
+                                <option value="3">办公室/明亮</option>
+                                <option value="4">家庭/弱暖光</option>
+                            </select>
+                        </div>
+
+                        <hr style="width:100%">
+
+                        <div class="input-group" id="aec-group">
+                            <label for="aec">自动曝光调节</label>
+                            <!-- AEC SENSOR，Auto Exposure Control Sensor，自动曝光快门调节 的 传感器/感光元件 及其简单控制 -->
+                            <div class="switch">
+                                <input id="aec" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="aec"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="aec2-group">
+                            <label for="aec2" style="color: #ff9900; font-weight: bold;">自动曝光数字信号</label>
+                            <div class="switch">
+                                <input id="aec2" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="aec2"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="ae_level-group">
+                            <label for="ae_level">自动曝光等级</label>
+                            <div class="range-min">-2</div>
+                            <input type="range" id="ae_level" min="-2" max="2" value="0" class="default-action">
+                            <div class="range-max">2</div>
+                        </div>
+                        <div class="input-group" id="aec_value-group">
+                            <label for="aec_value">曝光度</label>
+                            <div class="range-min">0</div>
+                            <input type="range" id="aec_value" min="0" max="1200" value="204" class="default-action">
+                            <div class="range-max">1200</div>
+                        </div>
+
+                      <hr style="width:100%">
+
+                        <div class="input-group" id="agc-group">
+                          <!-- AGC,Auto Graph Correct -->
+                            <label for="agc">最终画面自动修正</label>
+                            <div class="switch">
+                                <input id="agc" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="agc"></label>
+                            </div>
+                        </div>
+                        <div class="input-group hidden" id="agc_gain-group">
+                            <label for="agc_gain">较小</label>
+                            <div class="range-min">1x</div>
+                            <input type="range" id="agc_gain" min="0" max="30" value="5" class="default-action">
+                            <div class="range-max">31x</div>
+                        </div>
+                        <div class="input-group" id="gainceiling-group">
+                            <label for="gainceiling">较大</label>
+                            <div class="range-min">2x</div>
+                            <input type="range" id="gainceiling" min="0" max="6" value="0" class="default-action">
+                            <div class="range-max">128x</div>
+                        </div>
+
+                      <hr style="width:100%">
+
+                      <label>CMOS感光元件原厂瑕疵/坏点消除</label>
+
+                        <div class="input-group" id="bpc-group">
+                            <label for="bpc">死点/黑点消除</label>
+                            <!-- 	BPC (Bad Pixel Correction) , CMOS相机在出厂时会自带一些坏点，对应这些坏点采用中值滤波的方式消除一下-->
+                            <div class="switch">
+                                <input id="bpc" type="checkbox" class="default-action">
+                                <label class="slider" for="bpc"></label>
+                            </div>
+                        </div>
+
+                        <div class="input-group" id="wpc-group">
+                            <label for="wpc">白点/热点消除</label>
+                            <div class="switch">
+                                <input id="wpc" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="wpc"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="raw_gma-group">
+                            <label for="raw_gma">原始伽马校正</label>
+                            <!-- 显示器的电光转换特性天然就是一个γ≈2.2-2.5的幂函数（输入电压与亮度非线性） -->
+                            <!-- 对图像数据预先进行Gamma校正（通常取γ=1/2.2≈0.45），可以确保最终显示的亮度层次正确 -->
+                            <!-- 开启（默认）：在后续复杂的色彩处理和白平衡调整之前，先对原始数据的亮度分布进行优化。
+                              这能为后续处理提供更符合人眼感知的亮度基底，通常能获得更自然、细节更丰富的图像。 -->
+                            <!-- 关闭：跳过Gamma校正，保持传感器数据的原始线性亮度关系。这可能会让图像看起来整体发灰、
+                              对比度不足，但保留了绝对的线性数据，适用于某些需要严格线性测量的专业场景（如科学成像）。 -->
+                            <div class="switch">
+                                <input id="raw_gma" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="raw_gma"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="lenc-group">
+                            <label for="lenc">镜头几何畸变修正</label>
+                            <!-- 用于修正几何畸变校正​ 和 暗角校正​ -->
+                            <!-- 镜头（尤其是广角镜头）导致直线在图像边缘弯曲。常见有桶形畸变（图像向外膨胀）和枕形畸变（图像向内收缩）。 -->
+                              <!-- ISP内置一个针对该特定镜头模组的畸变映射表。通过算法重新映射像素位置，将弯曲的线条“拉直”。 -->
+                            <!-- 由于镜头通光不均，图像四角比中心暗 -->
+                              <!-- 建立一个亮度增益模型，对图像边缘和四角的像素值进行亮度补偿，使整个画面亮度均匀 -->
+                            <div class="switch">
+                                <input id="lenc" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="lenc"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="hmirror-group">
+                            <label for="hmirror">水平镜像</label>
+                            <!-- H-Mirror, horizon mirror, 水平镜像 -->
+                            <div class="switch">
+                                <input id="hmirror" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="hmirror"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="vflip-group">
+                            <label for="vflip">垂直翻转</label>
+                            <!-- V-Flip, vertical flip, 垂直翻转 -->
+                            <div class="switch">
+                                <input id="vflip" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="vflip"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="dcw-group">
+                            <label for="dcw">降采样/分辨率</label>
+                            <!-- DCW (Downsize Enable), 在固件部分属于Digital Crop and Warp模块, 降低图像采样 -->
+                              <!-- 说人话就是降低图片的分辨率, 一些像素极高的相机为了在低分辨率的显示器上正常显示, 不至于被jpeg算法搞丢太多信息,干脆提前降低分辨率 -->
+                              <!-- 咱这个200w的相机没必要加这个功能, 不过绝大部分电子相机用的同一套固件, 这个功能也就干脆没删 -->
+                            <div class="switch">
+                                <input id="dcw" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="dcw"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="colorbar-group">
+                            <label for="colorbar">色彩校准测试</label>
+                            <!-- ISP会屏蔽来自图像传感器的真实数据，转而内部生成一个数字化的标准彩条图案，并注入到处理流水线的后续环节 -->
+                            <!-- 用于测试和校准图像的色彩表现 -->
+                            <div class="switch">
+                                <input id="colorbar" type="checkbox" class="default-action">
+                                <label class="slider" for="colorbar"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="led-group">
+                          <label for="led_intensity">补光灯亮度</label>
+                          <!-- 这个还用说嘛, 控制相机闪光灯亮度的 -->
+                          <div class="range-min">0</div>
+                          <input type="range" id="led_intensity" min="0" max="255" value="0" class="default-action">
+                          <div class="range-max">255</div>
+                        </div>
+                        <div class="input-group" id="face_detect-group">
+                            <label for="face_detect">Face Detection</label>
+                            <!-- 人脸检测 图片里有没有脸？脸在哪里？ -->
+                            <div class="switch">
+                                <input id="face_detect" type="checkbox" class="default-action">
+                                <label class="slider" for="face_detect"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="face_recognize-group">
+                            <label for="face_recognize">Face Recognition</label>
+                            <!-- 人脸识别 图片中的这张脸是谁 -->
+                            <div class="switch">
+                                <input id="face_recognize" type="checkbox" class="default-action">
+                                <label class="slider" for="face_recognize"></label>
+                            </div>
+                        </div>
+                        <section id="buttons">
+                            <button id="get-still">画面保持</button>
+                            <button id="toggle-stream">实时图像数据流传输</button>
+                            <button id="face_enroll" class="disabled" disabled="disabled">人脸注册/录入</button>
+                        </section>
+
+                        <div style="margin-top: 8px;"><center><span style="font-weight: bold;">Advanced Settings</span></center></div>
+                        <hr style="width:100%; height:3px">
+                        <label for="nav-toggle-reg" class="toggle-section-label">&#9776;&nbsp;&nbsp;Register Get/Set</label><input type="checkbox" id="nav-toggle-reg" class="hidden toggle-section-button" checked="checked">
+                        <section class="toggle-section">
+                            <!--h4>Set Register</h4-->
+                            <div class="input-group" id="set-reg-group">
+                                <label for="set-reg">Reg, Mask, Value</label>
+                                <div class="text">
+                                    <input id="reg-addr" type="text" minlength="4" maxlength="6" size="6" value="0x111">
+                                </div>
+                                <div class="text">
+                                    <input id="reg-mask" type="text" minlength="4" maxlength="4" size="4" value="0x80">
+                                </div>
+                                <div class="text">
+                                    <input id="reg-value" type="text" minlength="4" maxlength="4" size="4" value="0x80">
+                                </div>
+                                <button class="inline-button" id="set-reg">Set</button>
+                            </div>
+                            <!--h4>Get Register</h4-->
+                            <div class="input-group" id="get-reg-group">
+                                <label for="get-reg">Reg, Mask</label>
+                                <div class="text">
+                                    <input id="get-reg-addr" type="text" minlength="4" maxlength="6" size="6" value="0x111">
+                                </div>
+                                <div class="text">
+                                    <input id="get-reg-mask" type="text" minlength="4" maxlength="6" size="6" value="0x80">
+                                </div>
+                                <button class="inline-button" id="get-reg">Get</button>
+                            </div>
+                            <div class="input-group">
+                                <label for="get-reg-value">Value</label>
+                                <div class="text">
+                                    <span id="get-reg-value">0x1234</span>
+                                </div>
+                            </div>
+                        </section>
+                        <hr style="width:100%; height:3px">
+                        <label for="nav-toggle-2640pll" class="toggle-section-label">&#9776;&nbsp;&nbsp;CLK</label><input type="checkbox" id="nav-toggle-2640pll" class="hidden toggle-section-button" checked="checked">
+                        <section class="toggle-section">
+
+                            <div class="input-group"><label for="2640pll1">CLK 2X</label><div class="switch"><input id="2640pll1" type="checkbox" class="reg-action" reg="0x111" offset="7" mask="0x01"><label class="slider" for="2640pll1"></label></div></div>
+
+                            <div class="input-group"><label for="2640pll3">CLK DIV</label><div class="text">0<input id="2640pll3" type="text" minlength="1" maxlength="2" size="2" value="1" class="reg-action" reg="0x111" offset="0" mask="0x3f">63</div></div>
+                            <div class="input-group"><label for="2640pll5">Auto PCLK</label><div class="switch"><input id="2640pll5" type="checkbox" class="reg-action" reg="0xd3" offset="7" mask="0x01"><label class="slider" for="2640pll5"></label></div></div>
+                            <div class="input-group"><label for="2640pll4">PCLK DIV</label><div class="text">0<input id="2640pll4" type="text" minlength="1" maxlength="3" size="3" value="4" class="reg-action" reg="0xd3" offset="0" mask="0x7f">127</div></div>
+
+                        </section>
+                        <hr style="width:100%; height:3px">
+                        <label for="nav-toggle-win" class="toggle-section-label">&#9776;&nbsp;&nbsp;Window</label><input type="checkbox" id="nav-toggle-win" class="hidden toggle-section-button" checked="checked">
+                        <section class="toggle-section">
+
+                            <div class="input-group">
+                                <label for="start-x">Sensor Resolution</label><select id="start-x">
+                                    <option value="2">CIF (400x296)</option>
+                                    <option value="1">SVGA (800x600)</option>
+                                    <option value="0" selected="selected">UXGA (1600x1200)</option>
+                                </select>
+                            </div>
+
+                            <div class="input-group" id="set-offset-res-group">
+                                <label for="offset-x">Offset</label>
+                                <div class="text">
+                                    X:<input id="offset-x" type="text" minlength="1" maxlength="3" size="6" value="400">
+                                </div>
+                                <div class="text">
+                                    Y:<input id="offset-y" type="text" minlength="1" maxlength="3" size="6" value="300">
+                                </div>
+                            </div>
+                            <div class="input-group" id="set-total-res-group">
+                                <label for="total-x">Window Size</label>
+                                <div class="text">
+                                    X:<input id="total-x" type="text" minlength="1" maxlength="4" size="6" value="800">
+                                </div>
+                                <div class="text">
+                                    Y:<input id="total-y" type="text" minlength="1" maxlength="4" size="6" value="600">
+                                </div>
+                            </div>
+                            <div class="input-group" id="set-output-res-group">
+                                <label for="output-x">Output Size</label>
+                                <div class="text">
+                                    X:<input id="output-x" type="text" minlength="1" maxlength="4" size="6" value="320">
+                                </div>
+                                <div class="text">
+                                    Y:<input id="output-y" type="text" minlength="1" maxlength="4" size="6" value="240">
+                                </div>
+                            </div>
+                            <button id="set-resolution">Set Resolution</button>
+                        </section>
+
+
+
+                      </nav>
+                </div>
+                <figure>
+                    <div id="stream-container" class="image-container hidden">
+                        <a id="save-still" href="#" class="button save" download="capture.jpg">Save</a>
+                        <div class="close" id="close-stream">×</div>
+                        <img id="stream" src="" crossorigin>
+                    </div>
+                </figure>
+            </div>
+        </section>
+        <script>
+document.addEventListener('DOMContentLoaded', function (event) {
+  var baseHost = document.location.origin
+  var streamUrl = baseHost + ':81'
+
+  function fetchUrl(url, cb){
+    fetch(url)
+      .then(function (response) {
+        if (response.status !== 200) {
+          cb(response.status, response.statusText);
+        } 
+        else {
+          response.text()
+          .then(function(data){
+            cb(200, data);
+          })
+          .catch(function(err) {
+            cb(-1, err);
+          });
+        }
+      })
+      .catch(function(err) {
+        cb(-1, err);
+      });
+  }
+
+// 外面的 catch​ → 物理连接出了问题/没连上
+// 网络不通
+// DNS解析失败
+// 服务器宕机
+// 跨域被浏览器阻止
+
+// 中间的 if判断​ → HTTP协议错误码
+// 404（找不到）
+// 500（服务器内部错误）
+// 403（禁止访问）
+// 401（需要登录）
+
+// 里面的 catch​ → 文件的各种问题
+// 虽然返回了200，但数据格式不对
+// JSON解析失败
+// 数据流读取中断
+// 响应体损坏或不完整
+
+// 一个简单类比：
+// 就像去图书馆借书：
+// 外层 catch：图书馆关门了/路不通 → 根本进不去
+// if判断：找到了书，但书上写着"禁止外借"/"已损坏" → 能看见书，但不能借
+// 内层 catch：书借出来了，但拿回家发现是乱码/缺页 → 书有问题
+
+  function setReg(reg, offset, mask, value, cb){
+    //console.log('Set Reg', '0x'+reg.toString(16), offset, '0x'+mask.toString(16), '0x'+value.toString(16), '('+value+')');
+    value = (value & mask) << offset;
+    mask = mask << offset;
+    fetchUrl(`${baseHost}/reg?reg=${reg}&mask=${mask}&val=${value}`, cb);
+  }
+
+  function getReg(reg, offset, mask, cb){
+    mask = mask << offset;
+    fetchUrl(`${baseHost}/greg?reg=${reg}&mask=${mask}`, function(code, txt){
+      let value = 0;
+      if(code == 200){
+        value = parseInt(txt);
+        value = (value & mask) >> offset;
+        txt = ''+value;
+      }
+      cb(code, txt);
+    });
+  }
+
+  function setXclk(xclk, cb){
+    fetchUrl(`${baseHost}/xclk?xclk=${xclk}`, cb);
+  }
+
+  function setWindow(start_x, start_y, end_x, end_y, offset_x, offset_y, total_x, total_y, output_x, output_y, scaling, binning, cb){
+    fetchUrl(`${baseHost}/resolution?sx=${start_x}&sy=${start_y}&ex=${end_x}&ey=${end_y}&offx=${offset_x}&offy=${offset_y}&tx=${total_x}&ty=${total_y}&ox=${output_x}&oy=${output_y}&scale=${scaling}&binning=${binning}`, cb);
+  }
+
+  const setRegButton = document.getElementById('set-reg')
+  setRegButton.onclick = () => {
+    let reg = parseInt(document.getElementById('reg-addr').value);
+    let mask = parseInt(document.getElementById('reg-mask').value);
+    let value = parseInt(document.getElementById('reg-value').value);
+
+    setReg(reg, 0, mask, value, function(code, txt){
+      if(code != 200){
+        alert('Error['+code+']: '+txt);
+      }
+    });
+  }
+
+  const getRegButton = document.getElementById('get-reg')
+  getRegButton.onclick = () => {
+    let reg = parseInt(document.getElementById('get-reg-addr').value);
+    let mask = parseInt(document.getElementById('get-reg-mask').value);
+    let value = document.getElementById('get-reg-value');
+
+    getReg(reg, 0, mask, function(code, txt){
+      if(code != 200){
+        value.innerHTML = 'Error['+code+']: '+txt;
+      } else {
+        value.innerHTML = '0x'+parseInt(txt).toString(16)+' ('+txt+')';
+      }
+    });
+  }
+
+  const setXclkButton = document.getElementById('set-xclk')
+  setXclkButton.onclick = () => {
+  // () => {}，将括号中的参数传递给后面的函数，只不过这里的括号中没有参数，后面的函数也不是定义了之后的函数名，而是直接写了一个匿名函数的函数体
+  // 需要注意的是()在一般的javascript写法中也并非用于多设备间通信的网络数据的获取，（标准的信息数据一般保存在DOM中，直接由document.getElementById('id')获取）
+  // 这里的() 更多时候都是直接用来传递设备本地的事件event。例如
+  // WebSocket 消息 - 数据从网络传入
+  // socket.onmessage = (event) => {
+  //     const data = JSON.parse(event.data);  // event 是浏览器传入的
+  //     updateUI(data);
+  // };
+    let xclk = parseInt(document.getElementById('xclk').value);
+
+    setXclk(xclk, function(code, txt){
+      if(code != 200){
+        alert('Error['+code+']: '+txt);
+      }
+    });
+  }
+
+    // 相当于下面这句话
+    // setXclkButton.onclick = send_SetXclk; 
+    // function send_SetXclk()
+    // {
+    //     let xclk = parseInt(document.getElementById('xclk').value);
+        
+    //     setXclk(xclk, function(code, txt){
+    //         if(code != 200){
+    //             alert('Error['+code+']: '+txt);
+    //         }
+    //     });
+    // }
+    // })
+
+  
+
+  const setResButton = document.getElementById('set-resolution')
+  setResButton.onclick = () => {
+    let start_x = parseInt(document.getElementById('start-x').value);
+    let offset_x = parseInt(document.getElementById('offset-x').value);
+    let offset_y = parseInt(document.getElementById('offset-y').value);
+    let total_x = parseInt(document.getElementById('total-x').value);
+    let total_y = parseInt(document.getElementById('total-y').value);
+    let output_x = parseInt(document.getElementById('output-x').value);
+    let output_y = parseInt(document.getElementById('output-y').value);
+
+    setWindow(start_x, 0, 0, 0, offset_x, offset_y, total_x, total_y, output_x, output_y, false, false, function(code, txt){
+      if(code != 200){
+        alert('Error['+code+']: '+txt);
+      }
+    });
+  }
+
+  const setRegValue = (el) => {
+    let reg = el.attributes.reg?parseInt(el.attributes.reg.nodeValue):0;
+    let offset = el.attributes.offset?parseInt(el.attributes.offset.nodeValue):0;
+    let mask = el.attributes.mask?parseInt(el.attributes.mask.nodeValue):255;
+    let value = 0;
+    switch (el.type) {
+      case 'checkbox':
+        value = el.checked ? mask : 0;
+        break;
+      case 'range':
+      case 'text':
+      case 'select-one':
+        value = el.value;
+        break
+      default:
+        return;
+    }
+
+    setReg(reg, offset, mask, value, function(code, txt){
+      if(code != 200){
+        alert('Error['+code+']: '+txt);
+      }
+    });
+  }
+
+  // Attach on change action for register elements
+  document
+    .querySelectorAll('.reg-action')
+    .forEach(el => {
+        if (el.type === 'text') {
+            el.onkeyup = function(e){
+                if(e.keyCode == 13){
+                    setRegValue(el);
+                }
+            }
+        } else {
+            el.onchange = () => setRegValue(el)
+        }
+    })
+
+
+  const updateRegValue = (el, value, updateRemote) => {
+    let initialValue;
+    let offset = el.attributes.offset?parseInt(el.attributes.offset.nodeValue):0;
+    let mask = (el.attributes.mask?parseInt(el.attributes.mask.nodeValue):255) << offset;
+    value = (value & mask) >> offset;
+    if (el.type === 'checkbox') {
+      initialValue = el.checked
+      value = !!value
+      el.checked = value
+    } else {
+      initialValue = el.value
+      el.value = value
+    }
+  }
+
+
+  const printReg = (el) => {
+    let reg = el.attributes.reg?parseInt(el.attributes.reg.nodeValue):0;
+    let offset = el.attributes.offset?parseInt(el.attributes.offset.nodeValue):0;
+    let mask = el.attributes.mask?parseInt(el.attributes.mask.nodeValue):255;
+    let value = 0;
+    switch (el.type) {
+      case 'checkbox':
+        value = el.checked ? mask : 0;
+        break;
+      case 'range':
+      case 'select-one':
+        value = el.value;
+        break
+      default:
+        return;
+    }
+    value = (value & mask) << offset;
+    return '0x'+reg.toString(16)+', 0x'+value.toString(16);
+  }
+
+
+
+  const hide = el => {
+    el.classList.add('hidden')
+  }
+  const show = el => {
+    el.classList.remove('hidden')
+  }
+
+  const disable = el => {
+    el.classList.add('disabled')
+    el.disabled = true
+  }
+
+  const enable = el => {
+    el.classList.remove('disabled')
+    el.disabled = false
+  }
+
+
+// 这里的命名有大问题，很有可能作者看都没看，直接写了个updateValue就完事了，
+// 结果现在这个函数既有更新UI的功能，又有更新远程服务器的功能，导致updateValue这个名字完全不能反映它的功能，
+// 应该拆成两个函数，一个叫updateUI，一个叫updateRemoteServer，
+// 或者干脆就不写updateRemoteServer这个函数了，直接在updateUI里调用fetch就好了
+// 有可能是ai生成的代码，毕竟现在的ai生成代码水平还不太行，函数命名和设计都很糟糕
+  const updateValue = (el, value, updateRemote) => {
+    updateRemote = updateRemote == null ? true : updateRemote
+    let initialValue
+    if (el.type === 'checkbox') {
+      initialValue = el.checked
+      value = !!value
+
+      // !!value 的作用是将 value 转换为布尔值。具体来说：
+      // ! 是逻辑非（取反）
+      // !true   // false
+      // !false  // true
+      // // !! 就是两次取反 = 转布尔
+      // !!true   // true
+      // !!false  // false
+      // 可以理解为和atoi一样的，others_to_bool
+
+      el.checked = value
+    } else {
+      initialValue = el.value
+      el.value = value
+    }
+
+    if (updateRemote && initialValue !== value) {
+      updateConfig(el);
+    } else if(!updateRemote){
+      if(el.id === "aec"){
+
+        // == 会进行类型转换，对于参数转译值相同但类型不同的值会判定为true（隐式转换）
+        // 5 == '5'      // true  （字符串转数字）
+        // 0 == false    // true  （布尔转数字）
+        // null == undefined  // true
+        // === 不会转换，类型不同直接 false
+        // 5 === '5'     // false
+        // 0 === false   // false
+        // null === undefined  // false
+        // 而cpp中的 == 是单纯的值比较，所以在cpp中 5 == '5' 是 false 的
+        // 这里这么用的原因也很简单，aec在代码中多次出现，包括但不限于id，class，var，为了防止莫名其妙的报错故使用===
+
+        value ? hide(exposure) : show(exposure)
+      } else if(el.id === "agc"){
+        if (value) {
+          show(gainCeiling)
+          hide(agcGain)
+        } else {
+          hide(gainCeiling)
+          show(agcGain)
+        }
+
+      } else if(el.id === "awb_gain"){
+        value ? show(wb) : hide(wb)
+      } 
+      // else if(el.id === "aec2"){
+      //   value ? show(ae_level) : hide(ae_level)
+      // } 
+      else if(el.id === "face_recognize"){
+        value ? enable(enrollButton) : disable(enrollButton)
+      } else if(el.id == "led_intensity"){
+        value > -1 ? show(ledGroup) : hide(ledGroup)
+      }
+    }
+  }
+
+  function updateConfig (el) {
+    let value
+    switch (el.type) {
+      case 'checkbox':
+        value = el.checked ? 1 : 0
+        break
+      case 'range':
+      case 'select-one':
+        value = el.value
+        break
+      case 'button':
+      case 'submit':
+        value = '1'
+        break
+      default:
+        return
+    }
+
+    const query = `${baseHost}/control?var=${el.id}&val=${value}`
+
+    fetch(query)
+      .then(response => {
+        console.log(`request to ${query} finished, status: ${response.status}`)
+      })
+  }
+
+  document
+    .querySelectorAll('.close')
+    .forEach(el => {
+      el.onclick = () => {
+        hide(el.parentNode)
+      }
+    })
+
+  // read initial values
+  fetch(`${baseHost}/status`)
+    .then(function (response) {
+      return response.json()
+    })
+    .then(function (state) {
+      document
+        .querySelectorAll('.default-action')
+        .forEach(el => {
+          updateValue(el, state[el.id], false)
+        })
+      document
+        .querySelectorAll('.reg-action')
+        .forEach(el => {
+            let reg = el.attributes.reg?parseInt(el.attributes.reg.nodeValue):0;
+            if(reg == 0){
+              return;
+            }
+            updateRegValue(el, state['0x'+reg.toString(16)], false)
+        })
+    })
+
+  const view = document.getElementById('stream')
+  const viewContainer = document.getElementById('stream-container')
+  const stillButton = document.getElementById('get-still')
+  const streamButton = document.getElementById('toggle-stream')
+  const enrollButton = document.getElementById('face_enroll')
+  const closeButton = document.getElementById('close-stream')
+  const saveButton = document.getElementById('save-still')
+  const ledGroup = document.getElementById('led-group')
+
+  const stopStream = () => {
+    window.stop();
+    streamButton.innerHTML = '实时图像数据流传输'
+  }
+
+  const startStream = () => {
+    view.src = `${streamUrl}/stream`
+    show(viewContainer)
+    streamButton.innerHTML = '停止图像传输'
+  }
+
+  // Attach actions to buttons
+  stillButton.onclick = () => {
+    stopStream()
+    view.src = `${baseHost}/capture?_cb=${Date.now()}`
+    show(viewContainer)
+  }
+
+  closeButton.onclick = () => {
+    stopStream()
+    hide(viewContainer)
+  }
+
+  streamButton.onclick = () => {
+    const streamEnabled = streamButton.innerHTML === '停止图像传输'
+    if (streamEnabled) {
+      stopStream()
+    } else {
+      startStream()
+    }
+  }
+
+  enrollButton.onclick = () => {
+    updateConfig(enrollButton)
+  }
+
+  saveButton.onclick = () => {
+    var canvas = document.createElement("canvas");
+    canvas.width = view.width;
+    canvas.height = view.height;
+    document.body.appendChild(canvas);
+    var context = canvas.getContext('2d');
+    context.drawImage(view,0,0);
+    try {
+      var dataURL = canvas.toDataURL('image/jpeg');
+      saveButton.href = dataURL;
+      var d = new Date();
+      saveButton.download = d.getFullYear() + ("0"+(d.getMonth()+1)).slice(-2) + ("0" + d.getDate()).slice(-2) + ("0" + d.getHours()).slice(-2) + ("0" + d.getMinutes()).slice(-2) + ("0" + d.getSeconds()).slice(-2) + ".jpg";
+    } catch (e) {
+      console.error(e);
+    }
+    canvas.parentNode.removeChild(canvas);
+  }
+
+  // Attach default on change action
+  document
+    .querySelectorAll('.default-action')
+    .forEach(el => {
+      el.onchange = () => updateConfig(el)
+    })
+
+  // Custom actions
+  // Gain
+  const agc = document.getElementById('agc')
+  const agcGain = document.getElementById('agc_gain-group')
+  const gainCeiling = document.getElementById('gainceiling-group')
+  agc.onchange = () => {
+    updateConfig(agc)
+    if (agc.checked) {
+      show(gainCeiling)
+      hide(agcGain)
+    } else {
+      hide(gainCeiling)
+      show(agcGain)
+    }
+  }
+
+  // Exposure
+  const aec = document.getElementById('aec')
+  const exposure = document.getElementById('aec_value-group')
+  aec.onchange = () => {
+    updateConfig(aec)
+    aec.checked ? hide(exposure) : show(exposure)
+  }
+
+  // AWB
+  const awb = document.getElementById('awb_gain')
+  const wb = document.getElementById('wb_mode-group')
+  awb.onchange = () => {
+    //  就很迷，前面的checkbox是onclick定义的，但是这里又采取了比较奇怪的onchange，
+    //  感觉完全没有必要，直接onclick就好了，或者干脆就onchange了算了，为什么要两种方式混着用，遍历都找不到函数名
+    updateConfig(awb)
+    awb.checked ? show(wb) : hide(wb)
+  }
+
+  // Detection and framesize
+  const detect = document.getElementById('face_detect')
+  const recognize = document.getElementById('face_recognize')
+  const framesize = document.getElementById('framesize')
+
+  framesize.onchange = () => {
+    updateConfig(framesize)
+    if (framesize.value > 5) {
+      updateValue(detect, false)
+      updateValue(recognize, false)
+    }
+  }
+
+  detect.onchange = () => {
+    if (framesize.value > 5) {
+      alert("Please select CIF or lower resolution before enabling this feature!");
+      updateValue(detect, false)
+      return;
+    }
+    updateConfig(detect)
+    if (!detect.checked) {
+      disable(enrollButton)
+      updateValue(recognize, false)
+    }
+  }
+
+  recognize.onchange = () => {
+    if (framesize.value > 5) {
+      alert("Please select CIF or lower resolution before enabling this feature!");
+      updateValue(recognize, false)
+      return;
+    }
+    updateConfig(recognize)
+    if (recognize.checked) {
+      enable(enrollButton)
+      updateValue(detect, true)
+    } else {
+      disable(enrollButton)
+    }
+  }
+})
+
+        </script>
+    </body>
+</html>

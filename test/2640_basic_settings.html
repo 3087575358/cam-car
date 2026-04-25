@@ -1,0 +1,1142 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <!-- 文件编码方式 -->
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <!-- meta是无标签元素，viewport即网页视窗（窗口）-->
+        <!-- content中的device-width意为适应屏幕窗口宽度进行显示与后续操作，initial-scale=1原始缩放大小为1，可以加一个判断语句根据手机或者电脑的设备类型判定来进行缩放显示全部内容-->
+        <title>ESP32 OV2460</title>
+        <!-- 网页标签上显示的名字 -->
+        <style>
+
+          /* 
+            我们首先明确css的基本语法：作为纯标注性质的描述语言，css定义的所有内容都是
+            元素:对象名/多个对象名;
+              name:parameters; 
+            的类似形式，例如
+              font-family: Arial,Helvetica,sans-serif;
+              color: #FFFF00;
+              font-size: 18px
+          */
+
+          /* 
+            其次就是每个总集开头的大类
+            其定义的内容
+            它既可以是html自带的一些内容（用于告诉浏览器你要显示的字体，图片，颜色的尺寸样式等等）
+              例如
+              body{}; 页面选用背景设计等信息
+              meta{}; 第4行：网页编码与缩放等等
+            也可以是你自己定义的一些后面要用于特殊文本与图片动画等等内容要调用的信息
+              例如320行附近的
+              .switch {};
+              .switch input {}; 用于定义2值选择开关的外观信息
+
+            其定义的格式有三种，按照优先级，分别是
+                #quote { color: red; }    权重：ID选择器，此条最终生效
+                .text { color: blue; }    权重：类选择器，此条胜出
+                p { color: black; }       权重：元素选择器
+              例如有一个元素，定义为
+              color：<p id="quote" class="text">
+              按照ID>类>元素的优先级，其应该显示为#quote的red
+          */
+            body {
+                font-family: Arial,Helvetica,sans-serif;/*mac上没有Arial字体*/
+                background: rgb(00, 00, 00);/*背景颜色，rgb函数定义颜色*/
+                color: #FFFFFF;/*字体颜色，实际上的输出就是# + 十进制转十六进制*/
+                font-size: 16px/*字体的线条宽度的像素大小*/
+            }
+
+            h2 {
+                font-family: Arial,Helvetica,sans-serif;
+                color: #FFFF00;
+                font-size: 18px
+            }
+            /* head-2，二级标题 */
+
+            section.main {
+                display: flex
+            }
+
+            #menu,section.main {
+                flex-direction: column;
+                justify-content: flex-start; /* 主轴（垂直）起始位置对齐 */
+                align-items: stretch;         /* 交叉轴（水平）拉伸对齐 */
+                flex-wrap: nowrap;           /* 元素在行显示溢出时，不换行 */
+                gap: 4px;                    /* 子元素间统一间距为8像素 */
+                padding: 12px;               /* 容器内边距 */
+            }
+
+            #menu {
+                display: none; 
+                flex-wrap: wrap;
+                min-width: 100px;
+                background: #363636;
+                padding: 8px;
+                border-radius: 4px;
+                margin-top: -10px;
+                margin-right: 10px;
+            }
+
+            #content {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: stretch
+            }
+            /* 26-54行定义主菜单和菜单里面的内容的格式 */
+
+            figure {
+                padding: 0px;
+                margin: 0;
+                -webkit-margin-before: 0;
+                margin-block-start: 0;
+                -webkit-margin-after: 0;
+                margin-block-end: 0;
+                -webkit-margin-start: 0;
+                margin-inline-start: 0;
+                -webkit-margin-end: 0;
+                margin-inline-end: 0;
+                /* 新增居中属性 */
+                /* display: flex;           将figure变为flex容器
+                justify-content: center; 水平居中子元素
+                align-items: center;     垂直居中子元素 */
+                /* 不确定flexbox是否适用于非文本框，尝试取消注释查看效果 */
+            }
+
+            figure img {
+                display: block;
+                width: 100%;
+                height: auto;
+                border-radius: 4px;
+                margin-top: 8px;
+            }
+            /* 定义图像显示的默认框区位置和大小，以及边框大小 */
+
+            /* 同上，视频传输的chunk流位置及边框定义 */
+            /* 注意min-width: 800px，所以必须用像素宽度大于等于800px的屏幕时才会执行下面的布局，把视频框放在菜单栏的右边 */
+            /* 如果条件不满足，则会按照flex的顺序排序显示在菜单栏的下面 */
+            @media (min-width: 800px) and (orientation:landscape) {
+                #content {
+                    display:flex;
+                    flex-wrap: nowrap;
+                    align-items: stretch;
+                    background: black;
+                }
+
+                figure img {
+                    display: block;
+                    max-width: 100%;
+                    max-height: calc(100vh - 40px);
+                    /* vh means 100 percent of viewport height, minus 40 px to display the full img */
+                    width: auto;
+                    height: auto
+                }
+
+                figure {
+                    padding: 0 0 0 0px;
+                    margin: 0;
+                    -webkit-margin-before: 0;
+                    margin-block-start: 0;
+                    -webkit-margin-after: 0;
+                    margin-block-end: 0;
+                    -webkit-margin-start: 0;
+                    margin-inline-start: 0;
+                    -webkit-margin-end: 0;
+                    margin-inline-end: 0
+                }
+            }
+
+            section#buttons {
+                display: flex;
+                flex-wrap: nowrap;
+                justify-content: space-between
+                /* justice正义，justify正当辩护，两端对齐 */
+            }
+
+            #nav-toggle {
+                cursor: pointer;
+                display: block
+            }
+
+            #nav-toggle-cb {
+                outline: 0;
+                opacity: 0;
+                width: 0;
+                height: 0
+            }
+
+            #nav-toggle-cb:checked+#menu {
+                display: flex
+            }
+
+            .input-group {
+                display: flex;
+                flex-wrap: nowrap;
+                line-height: 22px;
+                margin: 5px 0
+            }
+
+            .input-group>label {
+                display: inline-block;
+                padding-right: 10px;
+                min-width: 47%
+            }
+
+            .input-group input,.input-group select {
+                flex-grow: 1
+            }
+
+            .range-max,.range-min {
+                display: inline-block;
+                padding: 0 5px
+            }
+
+            button, .button {     /*cursor,计算机英文翻译就是屏幕上的“光标”*/
+                display: block;
+                margin: 5px;
+                padding: 0 12px;
+                border: 0;
+                line-height: 28px;
+                cursor: pointer;    /*这里的意思是：当光标移动到是.button类上时，自动变为指针选择样式*/
+                color: #fff;
+                background: #ff3034;
+                border-radius: 5px;
+                font-size: 16px;
+                outline: 0
+            }
+
+            .save {
+                position: absolute;
+                right: 25px;
+                top: 0px;
+                height: 16px;
+                line-height: 16px;
+                padding: 0 4px;
+                text-decoration: none;
+                cursor: pointer
+            }
+
+            button:hover {
+                background: #ff494d
+            }
+
+            button:active {
+                background: #f21c21
+            }
+
+            button.disabled {
+                cursor: default;
+                background: #a0a0a0
+            }
+
+            input[type=range] {
+                appearance: none;
+                /*如果出现兼容性问题，注释掉上面那句话而改用下面这句 -webkit-appearance: none; */
+                width: 100%;
+                height: 22px;
+                background: #363636;
+                cursor: pointer;
+                margin: 0
+            }
+
+            input[type=range]:focus {
+                outline: 0
+            }
+
+            input[type=range]::-webkit-slider-runnable-track {
+                width: 100%;
+                height: 2px;
+                cursor: pointer;
+                background: #EFEFEF;
+                border-radius: 0;
+                border: 0 solid #EFEFEF
+            }
+
+            input[type=range]::-webkit-slider-thumb {
+                border: 1px solid rgba(0,0,30,0);
+                height: 22px;
+                width: 22px;
+                border-radius: 50px;
+                background: #ff3034;
+                cursor: pointer;
+                -webkit-appearance: none;
+                margin-top: -11.5px
+            }
+
+            input[type=range]:focus::-webkit-slider-runnable-track {
+                background: #EFEFEF
+            }
+
+            input[type=range]::-moz-range-track {
+                width: 100%;
+                height: 2px;
+                cursor: pointer;
+                background: #EFEFEF;
+                border-radius: 0;
+                border: 0 solid #EFEFEF
+            }
+
+            input[type=range]::-moz-range-thumb {
+                border: 1px solid rgba(0,0,30,0);
+                height: 22px;
+                width: 22px;
+                border-radius: 50px;
+                background: #ff3034;
+                cursor: pointer
+            }
+
+            input[type=range]::-ms-track {
+                width: 100%;
+                height: 2px;
+                cursor: pointer;
+                background: 0 0;
+                border-color: transparent;
+                color: transparent
+            }
+
+            input[type=range]::-ms-fill-lower {
+                background: #EFEFEF;
+                border: 0 solid #EFEFEF;
+                border-radius: 0
+            }
+
+            input[type=range]::-ms-fill-upper {
+                background: #EFEFEF;
+                border: 0 solid #EFEFEF;
+                border-radius: 0
+            }
+
+            input[type=range]::-ms-thumb {
+                border: 1px solid rgba(0,0,30,0);
+                height: 22px;
+                width: 22px;
+                border-radius: 50px;
+                background: #ff3034;
+                cursor: pointer;
+                height: 2px
+            }
+
+            input[type=range]:focus::-ms-fill-lower {
+                background: #EFEFEF
+            }
+
+            input[type=range]:focus::-ms-fill-upper {
+                background: #363636
+            }
+
+            .switch {
+                display: block;
+                position: relative;
+                line-height: 22px;
+                font-size: 16px;
+                height: 22px
+            }
+
+            .switch input {
+                outline: 0;
+                opacity: 0;
+                width: 0;
+                height: 0
+            }
+
+            .slider {
+                width: 50px;
+                height: 22px;
+                border-radius: 22px;
+                cursor: pointer;
+                background-color: grey
+            }
+
+            .slider,.slider:before {
+                display: inline-block;
+                transition: .4s
+            }
+
+            .slider:before {
+                position: relative;
+                content: "";
+                border-radius: 50%;
+                height: 16px;
+                width: 16px;
+                left: 4px;
+                top: 3px;
+                background-color: #fff
+            }
+
+            input:checked+.slider {
+                background-color: #5630ff
+            }
+
+            input:checked+.slider:before {
+                -webkit-transform: translateX(26px);
+                transform: translateX(26px)
+            }
+
+            select {
+                border: 1px solid #363636;
+                font-size: 14px;
+                height: 22px;
+                outline: 0;
+                border-radius: 5px
+            }
+
+            .image-container {
+                position: relative;
+                min-width: 160px
+            }
+
+            .close {
+                position: absolute;
+                right: 5px;
+                top: 5px;
+                background: #ff3034;
+                width: 16px;
+                height: 16px;
+                border-radius: 100px;
+                color: #fff;
+                text-align: center;
+                line-height: 18px;
+                cursor: pointer
+            }
+
+            .hidden {
+                display: none
+            }
+
+            input[type=text] {
+                border: 1px solid #363636;
+                font-size: 14px;
+                height: 20px;
+                margin: 1px;
+                outline: 0;
+                border-radius: 5px
+            }
+
+            .inline-button {
+                line-height: 20px;
+                margin: 2px;
+                padding: 1px 4px 2px 4px;
+            }
+
+            label.toggle-section-label {
+                cursor: pointer;
+                display: block
+            }
+
+            input.toggle-section-button {
+                outline: 0;
+                opacity: 0;
+                width: 0;
+                height: 0
+            }
+
+            input.toggle-section-button:checked+section.toggle-section {
+                display: none
+            }
+
+        </style>
+    </head>
+    <body>
+        <section class="main">
+
+            <div id="logo"><!--logo没有本地定义，不影响显示-->
+                <label for="nav-toggle-cb" id="nav-toggle">&#9875;OV2640 设置菜单</label>
+            </div>
+
+            <div id="content">
+                <div id="sidebar">
+                    <input type="checkbox" id="nav-toggle-cb" checked="checked">
+                    <nav id="menu">
+                        <section id="xclk-section" class="nothidden">
+                            <div class="input-group" id="set-xclk-group">
+
+                                <label for="set-xclk">相机传感器基频</label>
+
+                                <div class="text">
+                                  <label>XCLK</label>
+                                    <input id="xclk" type="text" minlength="1" maxlength="2" size="2" value="20">
+                                  <label>MHz</label>
+                                    <!-- 这里写的一坨屎，不限定/int输入，我写个 玉足 上去都行 -->
+                                </div>
+
+                                <button class="inline-button" id="set-xclk">设置</button>
+
+                            </div>
+                        </section>
+
+                        <div class="input-group" id="framesize-group">
+                            <label for="framesize">摄像头分辨率</label>
+                            <select id="framesize" class="default-action">
+                                <!-- 2MP -->
+                                <option value="13">UXGA(1600x1200)</option>
+                                <option value="12">SXGA(1280x1024)</option>
+                                <option value="11">HD(1280x720)</option>
+                                <option value="10">XGA(1024x768)</option>
+                                <option value="9">SVGA(800x600)</option>
+                                <option value="8">VGA(640x480)</option>
+                                <option value="7">HVGA(480x320)</option>
+                                <option value="6">CIF(400x296)</option>
+                                <option value="5">QVGA(320x240)</option>
+                                <option value="4">240x240</option>
+                                <option value="3">HQVGA(240x176)</option>
+                                <option value="2">QCIF(176x144)</option>
+                                <option value="1">QQVGA(160x120)</option>
+                                <option value="0">96x96</option>
+                            </select>
+                        </div>
+
+                        <div class="input-group" id="quality-group">
+                            <label for="quality">图片品质</label>
+                            <!-- quality如何影响图片品质，这里可以顺便复习一下 -->
+                            <!-- 
+                            JPEG压缩流程：
+                            1. 感光元件采集RGB -> 2. 转换至YCbCr色彩空间 -> 3. 分块进行DCT变换
+                            4. 量化：DCT系数 ÷ 量化表(LQT/CQT)对应值 -> 取整（关键有损步骤）
+                               品质参数(quality)控制量化表整体缩放：两个数值是反比例系数
+                               品质参数越低，表值越大，量化步长越大，丢弃信息越多
+                            5. 熵编码（Zigzag扫描、行程编码、霍夫曼编码）生成压缩数据
+                            
+                            JPEG解压流程（逆过程）：
+                            1. 熵解码 -> 2. 反量化：量化值 × 量化表 -> 近似恢复DCT系数（已损失精度）
+                            3. 逆DCT变换 -> 4. YCbCr转回RGB -> 5. 三原色叠加显示
+                            
+                            信息丢失发生在：量化时的取整操作（小数部分永久丢弃）及反量化时的近似恢复。
+                            重复压缩会导致“代际损失”，品质逐代下降。 
+                            -->
+                            <div class="range-min">4</div>
+                            <input type="range" id="quality" min="4" max="63" value="10" class="default-action">
+                            <div class="range-max">63</div>
+                        </div>
+
+                        <div class="input-group" id="brightness-group">
+                            <label for="brightness">亮度</label>
+                            <div class="range-min">-2</div>
+                            <input type="range" id="brightness" min="-2" max="2" value="0" class="default-action">
+                            <div class="range-max">2</div>
+                        </div>
+
+                        <div class="input-group" id="contrast-group">
+                            <label for="contrast">对比度</label>
+                            <div class="range-min">-2</div>
+                            <input type="range" id="contrast" min="-2" max="2" value="0" class="default-action">
+                            <div class="range-max">2</div>
+                        </div>
+                        
+                        <div class="input-group" id="saturation-group">
+                            <label for="saturation">饱和度</label>
+                            <div class="range-min">-2</div>
+                            <input type="range" id="saturation" min="-2" max="2" value="0" class="default-action">
+                            <div class="range-max">2</div>
+                        </div>
+
+                        <div class="input-group" id="special_effect-group">
+                            <label for="special_effect">查看三色通道值图像</label>
+                            <select id="special_effect" class="default-action">
+                                <option value="0" selected="selected">无效果</option>
+                                <option value="1">负片/颜色反转</option>
+                                <option value="2">黑白/灰度图</option>
+                                <option value="3">红通</option>
+                                <option value="4">绿通</option>
+                                <option value="5">蓝通</option>
+                                <option value="6">怀旧/棕褐色</option>
+                            </select>
+                        </div>
+
+                        <div class="input-group" id="zoom-scale-group">
+                            <label for="zoom-scale">图像缩放</label>
+                            <div class="range-min">1</div>
+                            <input type="range" id="zoom-scale" min="1" max="4" value="1" class="default-action">
+                            <div class="range-max">4</div>
+                        </div>
+
+                        <hr style="width:100%">
+
+                        <div class="input-group" id="awb-group">
+                            <label for="awb">白平衡</label>
+                            <!-- AWB Auto White Balance -->
+                            <div class="switch">
+                                <input id="awb" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="awb"></label>
+                            </div>
+                        </div>
+
+                        <div class="input-group" id="awb_gain-group">
+                            <label for="awb_gain" style="color: #ff9900; font-weight: bold;">白平衡增益算法调节</label>
+                            <!-- 这里用一个非标准写法，直接在label标签里面设置style样式 -->
+                            <div class="switch">
+                                <input id="awb_gain" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="awb_gain"></label>
+                            </div>
+                        </div>
+                        
+                        <div class="input-group" id="wb_mode-group">
+                            <label for="wb_mode">白平衡常见场景</label>
+                            <select id="wb_mode" class="default-action">
+                                <option value="0" selected="selected">自动识别</option>
+                                <option value="1">晴天</option>
+                                <option value="2">多云</option>
+                                <option value="3">办公室/明亮</option>
+                                <option value="4">家庭/弱暖光</option>
+                            </select>
+                        </div>
+
+                        <hr style="width:100%">
+
+                        <div class="input-group" id="aec-group">
+                            <label for="aec">自动曝光调节</label>
+                            <!-- AEC SENSOR，Auto Exposure Control Sensor，自动曝光快门调节 的 传感器/感光元件 及其简单控制 -->
+                            <div class="switch">
+                                <input id="aec" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="aec"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="aec2-group">
+                            <label for="aec2" style="color: #ff9900; font-weight: bold;">自动曝光数字信号</label>
+                            <div class="switch">
+                                <input id="aec2" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="aec2"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="ae_level-group">
+                            <label for="ae_level">自动曝光等级</label>
+                            <div class="range-min">-2</div>
+                            <input type="range" id="ae_level" min="-2" max="2" value="0" class="default-action">
+                            <div class="range-max">2</div>
+                        </div>
+                        <div class="input-group" id="aec_value-group">
+                            <label for="aec_value">曝光度</label>
+                            <div class="range-min">0</div>
+                            <input type="range" id="aec_value" min="0" max="1200" value="204" class="default-action">
+                            <div class="range-max">1200</div>
+                        </div>
+
+                      <hr style="width:100%">
+
+                        <div class="input-group" id="agc-group">
+                          <!-- AGC,Auto Graph Correct -->
+                            <label for="agc">最终画面自动修正</label>
+                            <div class="switch">
+                                <input id="agc" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="agc"></label>
+                            </div>
+                        </div>
+                        <div class="input-group hidden" id="agc_gain-group">
+                            <label for="agc_gain">较小</label>
+                            <div class="range-min">1x</div>
+                            <input type="range" id="agc_gain" min="0" max="30" value="5" class="default-action">
+                            <div class="range-max">31x</div>
+                        </div>
+                        <div class="input-group" id="gainceiling-group">
+                            <label for="gainceiling">较大</label>
+                            <div class="range-min">2x</div>
+                            <input type="range" id="gainceiling" min="0" max="6" value="0" class="default-action">
+                            <div class="range-max">128x</div>
+                        </div>
+
+                      <hr style="width:100%">
+
+                      <label>CMOS感光元件原厂瑕疵/坏点消除</label>
+
+                        <div class="input-group" id="bpc-group">
+                            <label for="bpc">死点/黑点消除</label>
+                            <!-- 	BPC (Bad Pixel Correction) , CMOS相机在出厂时会自带一些坏点，对应这些坏点采用中值滤波的方式消除一下-->
+                            <div class="switch">
+                                <input id="bpc" type="checkbox" class="default-action">
+                                <label class="slider" for="bpc"></label>
+                            </div>
+                        </div>
+
+                        <div class="input-group" id="wpc-group">
+                            <label for="wpc">白点/热点消除</label>
+                            <div class="switch">
+                                <input id="wpc" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="wpc"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="raw_gma-group">
+                            <label for="raw_gma">原始伽马校正</label>
+                            <!-- 显示器的电光转换特性天然就是一个γ≈2.2-2.5的幂函数（输入电压与亮度非线性） -->
+                            <!-- 对图像数据预先进行Gamma校正（通常取γ=1/2.2≈0.45），可以确保最终显示的亮度层次正确 -->
+                            <!-- 开启（默认）：在后续复杂的色彩处理和白平衡调整之前，先对原始数据的亮度分布进行优化。
+                              这能为后续处理提供更符合人眼感知的亮度基底，通常能获得更自然、细节更丰富的图像。 -->
+                            <!-- 关闭：跳过Gamma校正，保持传感器数据的原始线性亮度关系。这可能会让图像看起来整体发灰、
+                              对比度不足，但保留了绝对的线性数据，适用于某些需要严格线性测量的专业场景（如科学成像）。 -->
+                            <div class="switch">
+                                <input id="raw_gma" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="raw_gma"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="lenc-group">
+                            <label for="lenc">镜头几何畸变修正</label>
+                            <!-- 用于修正几何畸变校正​ 和 暗角校正​ -->
+                            <!-- 镜头（尤其是广角镜头）导致直线在图像边缘弯曲。常见有桶形畸变（图像向外膨胀）和枕形畸变（图像向内收缩）。 -->
+                              <!-- ISP内置一个针对该特定镜头模组的畸变映射表。通过算法重新映射像素位置，将弯曲的线条“拉直”。 -->
+                            <!-- 由于镜头通光不均，图像四角比中心暗 -->
+                              <!-- 建立一个亮度增益模型，对图像边缘和四角的像素值进行亮度补偿，使整个画面亮度均匀 -->
+                            <div class="switch">
+                                <input id="lenc" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="lenc"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="hmirror-group">
+                            <label for="hmirror">水平镜像</label>
+                            <!-- H-Mirror, horizon mirror, 水平镜像 -->
+                            <div class="switch">
+                                <input id="hmirror" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="hmirror"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="vflip-group">
+                            <label for="vflip">垂直翻转</label>
+                            <!-- V-Flip, vertical flip, 垂直翻转 -->
+                            <div class="switch">
+                                <input id="vflip" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="vflip"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="dcw-group">
+                            <label for="dcw">降采样/分辨率</label>
+                            <!-- DCW (Downsize Enable), 在固件部分属于Digital Crop and Warp模块, 降低图像采样 -->
+                              <!-- 说人话就是降低图片的分辨率, 一些像素极高的相机为了在低分辨率的显示器上正常显示, 不至于被jpeg算法搞丢太多信息,干脆提前降低分辨率 -->
+                              <!-- 咱这个200w的相机没必要加这个功能, 不过绝大部分电子相机用的同一套固件, 这个功能也就干脆没删 -->
+                            <div class="switch">
+                                <input id="dcw" type="checkbox" class="default-action" checked="checked">
+                                <label class="slider" for="dcw"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="colorbar-group">
+                            <label for="colorbar">色彩校准测试</label>
+                            <!-- ISP会屏蔽来自图像传感器的真实数据，转而内部生成一个数字化的标准彩条图案，并注入到处理流水线的后续环节 -->
+                            <!-- 用于测试和校准图像的色彩表现 -->
+                            <div class="switch">
+                                <input id="colorbar" type="checkbox" class="default-action">
+                                <label class="slider" for="colorbar"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="led-group">
+                          <label for="led_intensity">补光灯亮度</label>
+                          <!-- 这个还用说嘛, 控制相机闪光灯亮度的 -->
+                          <div class="range-min">0</div>
+                          <input type="range" id="led_intensity" min="0" max="255" value="0" class="default-action">
+                          <div class="range-max">255</div>
+                        </div>
+                        <div class="input-group" id="face_detect-group">
+                            <label for="face_detect">Face Detection</label>
+                            <!-- 人脸检测 图片里有没有脸？脸在哪里？ -->
+                            <div class="switch">
+                                <input id="face_detect" type="checkbox" class="default-action">
+                                <label class="slider" for="face_detect"></label>
+                            </div>
+                        </div>
+                        <div class="input-group" id="face_recognize-group">
+                            <label for="face_recognize">Face Recognition</label>
+                            <!-- 人脸识别 图片中的这张脸是谁 -->
+                            <div class="switch">
+                                <input id="face_recognize" type="checkbox" class="default-action">
+                                <label class="slider" for="face_recognize"></label>
+                            </div>
+                        </div>
+                        <section id="buttons">
+                            <button id="get-still">画面保持</button>
+                            <button id="toggle-stream">实时图像数据流传输</button>
+                            <button id="face_enroll" class="disabled" disabled="disabled">人脸注册/录入</button>
+                        </section>
+
+                        </nav>
+                </div>
+                <figure>
+                    <div id="stream-container" class="image-container hidden">
+                        <a id="save-still" href="#" class="button save" download="capture.jpg">Save</a>
+                        <div class="close" id="close-stream">&#0078;</div>
+                        <img id="stream" src="" crossorigin>
+                    </div>
+                </figure>
+            </div>
+        </section>
+        <script>
+document.addEventListener('DOMContentLoaded', function (event) {
+  var baseHost = document.location.origin
+  var streamUrl = baseHost + ':81'
+
+  function fetchUrl(url, cb){
+    fetch(url)
+      .then(function (response) {
+        if (response.status !== 200) {
+          cb(response.status, response.statusText);
+        } 
+        else {
+          response.text()
+          .then(function(data){
+            cb(200, data);
+          })
+          .catch(function(err) {
+            cb(-1, err);
+          });
+        }
+      })
+      .catch(function(err) {
+        cb(-1, err);
+      });
+  }
+
+  const hide = el => {
+    el.classList.add('hidden')
+  }
+  const show = el => {
+    el.classList.remove('hidden')
+  }
+
+  const disable = el => {
+    el.classList.add('disabled')
+    el.disabled = true
+  }
+
+  const enable = el => {
+    el.classList.remove('disabled')
+    el.disabled = false
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  // 更新 UI 并同步到服务器
+  // 这个函数的名字不叫updateValue，应该叫update_UI_display
+  // 他不会修改esp32的配置值，而是根据传入的value参数来更新UI显示状态
+  const updateValue = (el, value, updateRemote) => {
+    updateRemote = updateRemote == null ? true : updateRemote
+    let initialValue
+    if (el.type === 'checkbox') {
+      initialValue = el.checked
+      value = !!value
+      el.checked = value
+    } else {
+      initialValue = el.value
+      el.value = value
+    }
+
+    //根据初始值和当前值的对比，决定是否需要发送更新请求到服务器：是否需要进行UI联动显示/隐藏等操作
+    if (updateRemote && initialValue !== value) {
+      updateConfig(el);
+    } else if(!updateRemote){
+      if(el.id === "aec"){
+        value ? hide(exposure) : show(exposure)
+      } else if(el.id === "agc"){
+        if (value) {
+          show(gainCeiling)
+          hide(agcGain)
+        } else {
+          hide(gainCeiling)
+          show(agcGain)
+        }
+      } else if(el.id === "awb_gain"){
+        value ? show(wb) : hide(wb)
+      } else if(el.id === "face_recognize"){
+        value ? enable(enrollButton) : disable(enrollButton)
+      } else if(el.id == "led_intensity"){
+        value > -1 ? show(ledGroup) : hide(ledGroup)
+      }
+    }
+  }
+
+  // 发送配置到服务器
+  // read the element input type and its value of type-name
+  // then send the config to server esp32cam 
+  // esp32cam will update its varied variable and varied value
+  // 所以不多说,应该改名为read_And_Send_Control
+  function updateConfig (el) {
+    let value
+    switch (el.type) {
+      case 'checkbox':
+        value = el.checked ? 1 : 0
+        break
+      case 'range':
+      case 'select-one':
+        value = el.value
+        break
+      case 'button':
+      case 'submit':
+        value = '1'
+        break
+      default:
+        return
+    }
+
+    const query = `${baseHost}/control?var=${el.id}&val=${value}`
+
+    fetch(query)
+      .then(response => {
+        console.log(`request to ${query} finished, status: ${response.status}`)
+      })
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  // 关闭按钮事件
+  // 专门用来给摄像头-视屏窗口，关闭用的
+  document
+    .querySelectorAll('.close')
+    .forEach(el => {
+      el.onclick = () => {
+        hide(el.parentNode)
+      }
+    })
+
+  // 以及开机时候所有 default-action 元素的初始值读取和 服务端数据对齐-UI更新逻辑
+  // 读取初始值
+  fetch(`${baseHost}/status`)
+    .then(function (response) {
+      return response.json()
+    })
+    .then(function (state) {
+      document
+        .querySelectorAll('.default-action')
+        .forEach(el => {
+          updateValue(el, state[el.id], false)
+        })
+    })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  // 视频流控制
+  const view = document.getElementById('stream')
+  const viewContainer = document.getElementById('stream-container')
+  const stillButton = document.getElementById('get-still')
+  const streamButton = document.getElementById('toggle-stream')
+  const enrollButton = document.getElementById('face_enroll')
+  const closeButton = document.getElementById('close-stream')
+  const saveButton = document.getElementById('save-still')
+  const ledGroup = document.getElementById('led-group')
+
+  const stopStream = () => {
+    window.stop();
+    streamButton.innerHTML = '实时图像数据流传输'
+  }
+
+  const startStream = () => {
+    view.src = `${streamUrl}/stream`
+    show(viewContainer)
+    streamButton.innerHTML = '停止图像传输'
+  }
+
+  // 拍照按钮
+  stillButton.onclick = () => {
+    stopStream()
+    view.src = `${baseHost}/capture?_cb=${Date.now()}`
+    show(viewContainer)
+  }
+
+  // 关闭视频按钮
+  closeButton.onclick = () => {
+    stopStream()
+    hide(viewContainer)
+  }
+
+  // 开始/停止流传输按钮
+  streamButton.onclick = () => {
+    const streamEnabled = streamButton.innerHTML === '停止图像传输'
+    if (streamEnabled) {
+      stopStream()
+    } else {
+      startStream()
+    }
+  }
+
+  // 人脸注册按钮
+  enrollButton.onclick = () => {
+    updateConfig(enrollButton)
+  }
+
+  // 保存图片按钮
+  saveButton.onclick = () => {
+    var canvas = document.createElement("canvas");
+    canvas.width = view.width;
+    canvas.height = view.height;
+    document.body.appendChild(canvas);
+    var context = canvas.getContext('2d');
+    context.drawImage(view,0,0);
+    try {
+      var dataURL = canvas.toDataURL('image/jpeg');
+      saveButton.href = dataURL;
+      var d = new Date();
+      saveButton.download = d.getFullYear() + ("0"+(d.getMonth()+1)).slice(-2) + 
+                                              ("0" + d.getDate()).slice(-2) + 
+                                              ("0" + d.getHours()).slice(-2) + 
+                                              ("0" + d.getMinutes()).slice(-2) + 
+                                              ("0" + d.getSeconds()).slice(-2) + 
+                                              ".jpg";
+    } catch (e) {
+      console.error(e);
+    }
+    canvas.parentNode.removeChild(canvas);
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  // 绑定所有 default-action 元素的 onchange 事件
+  // 这里的逻辑是，凡是带有 default-action 类的元素，在它们的值发生改变时，都会调用 updateConfig(el) 来把这个改变发送到服务器
+  // 而作者把所有需要发送改变到服务器的元素都加上了 default-action 这个类，所以就不需要一个个去绑定事件了，直接一锅端了
+  document
+    .querySelectorAll('.default-action')
+    .forEach(el => {
+      el.onchange = () => updateConfig(el)
+    })
+
+
+  // 基础的画面调节功能-操作端逻辑 和 UI隐藏/展示联动逻辑
+  // 这里因为同时用到了UI隐藏/展示联动逻辑，所以单独于上面的el.onchange = () => updateConfig(el)之外
+  // 每个对应的功能aec，awb等等又写了一个函数专门来show/hide相关的UI元素
+  // 自定义联动逻辑
+  // 增益控制
+  const agc = document.getElementById('agc')
+  const agcGain = document.getElementById('agc_gain-group')
+  const gainCeiling = document.getElementById('gainceiling-group')
+  agc.onchange = () => {
+    updateConfig(agc)
+    if (agc.checked) {
+      show(gainCeiling)
+      hide(agcGain)
+    } else {
+      hide(gainCeiling)
+      show(agcGain)
+    }
+  }
+
+  // 曝光控制
+  const aec = document.getElementById('aec')
+  const exposure = document.getElementById('aec_value-group')
+  aec.onchange = () => {
+    updateConfig(aec)
+    aec.checked ? hide(exposure) : show(exposure)
+  }
+
+  // 白平衡增益控制
+  const awb = document.getElementById('awb_gain')
+  const wb = document.getElementById('wb_mode-group')
+  awb.onchange = () => {
+    updateConfig(awb)
+    awb.checked ? show(wb) : hide(wb)
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  // 人脸检测与分辨率联动
+  // 下面这一溜都是人脸检测的东西，暂时可以不管
+  const detect = document.getElementById('face_detect')
+  const recognize = document.getElementById('face_recognize')
+  const framesize = document.getElementById('framesize')
+
+  framesize.onchange = () => {
+    updateConfig(framesize)
+    if (framesize.value > 5) {
+      updateValue(detect, false)
+      updateValue(recognize, false)
+      // updateValue本来应该有三个参数，第三个参数是updateRemote，表示是否需要把这个更新同步到服务器
+      // updateRemote这里默认为true，也就是说默认会把更新同步到服务器
+      // 这种写法会产生多余的网络通信，但是确实能减小文件体积
+    }
+  }
+
+  detect.onchange = () => {
+    if (framesize.value > 5) {
+      alert("Please select CIF or lower resolution before enabling this feature!");
+      updateValue(detect, false)
+      return;
+    }
+    updateConfig(detect)
+    if (!detect.checked) {
+      disable(enrollButton)
+      updateValue(recognize, false)
+    }
+  }
+
+  recognize.onchange = () => {
+    if (framesize.value > 5) {
+      alert("Please select CIF or lower resolution before enabling this feature!");
+      updateValue(recognize, false)
+      return;
+    }
+    updateConfig(recognize)
+    if (recognize.checked) {
+      enable(enrollButton)
+      updateValue(detect, true)
+    } else {
+      disable(enrollButton)
+    }
+  }
+})
+</script>
+</body>
+</html>

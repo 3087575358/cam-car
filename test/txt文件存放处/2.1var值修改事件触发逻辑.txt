@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+
+<body>
+    <script>
+        document.addEventListener('DOMContentLoaded', function (event) {
+            var baseHost = document.location.origin
+            var streamUrl = baseHost + ':81'
+
+            function fetchUrl(url, cb) {
+                fetch(url)
+                    .then(function (response) {
+                        if (response.status !== 200) {
+                            cb(response.status, response.statusText);
+                        }
+                        else {
+                            response.text()
+                                .then(function (data) {
+                                    cb(200, data);
+                                })
+                                .catch(function (err) {
+                                    cb(-1, err);
+                                });
+                        }
+                    })
+                    .catch(function (err) {
+                        cb(-1, err);
+                    });
+            }
+            // Attach on change action for register elements
+            document
+                .querySelectorAll('.reg-action')
+                .forEach(el => {
+                    if (el.type === 'text') {
+                        el.onkeyup = function (e) {
+                            if (e.keyCode == 13) {
+                                setRegValue(el);
+                            }
+                        }
+                    } else {
+                        el.onchange = () => setRegValue(el)
+                    }
+                })
+
+
+            const updateRegValue = (el, value, updateRemote) => {
+                let initialValue;
+                let offset = el.attributes.offset ? parseInt(el.attributes.offset.nodeValue) : 0;
+                let mask = (el.attributes.mask ? parseInt(el.attributes.mask.nodeValue) : 255) << offset;
+                value = (value & mask) >> offset;
+                if (el.type === 'checkbox') {
+                    initialValue = el.checked
+                    value = !!value
+                    el.checked = value
+                } else {
+                    initialValue = el.value
+                    el.value = value
+                }
+            }
+
+
+            const printReg = (el) => {
+                let reg = el.attributes.reg ? parseInt(el.attributes.reg.nodeValue) : 0;
+                let offset = el.attributes.offset ? parseInt(el.attributes.offset.nodeValue) : 0;
+                let mask = el.attributes.mask ? parseInt(el.attributes.mask.nodeValue) : 255;
+                let value = 0;
+                switch (el.type) {
+                    case 'checkbox':
+                        value = el.checked ? mask : 0;
+                        break;
+                    case 'range':
+                    case 'select-one':
+                        value = el.value;
+                        break
+                    default:
+                        return;
+                }
+                value = (value & mask) << offset;
+                return '0x' + reg.toString(16) + ', 0x' + value.toString(16);
+            }
+
+            const updateValue = (el, value, updateRemote) => {
+                updateRemote = updateRemote == null ? true : updateRemote
+                // if (updateRemote == null){
+                //  updateRemote = true
+                //  }
+                //else{
+                //  updateRemote = updateRemote
+                //  }
+                let initialValue
+                if (el.type === 'checkbox') {
+                    initialValue = el.checked
+                    value = !!value
+                    el.checked = value
+                } else {
+                    initialValue = el.value
+                    el.value = value
+                }
+            }
+
+
+
+
+
+
+            // read initial values
+            // 在index_ov2640.html中，这个函数只在DOMContentLoaded事件中被调用了一次，来读取初始值并更新界面
+            fetch(`${baseHost}/status`)
+                .then(function (response) {
+                    return response.json()
+                })
+                .then(function (state) {
+                    document
+                        .querySelectorAll('.default-action')
+                        .forEach(el => {
+                            updateValue(el, state[el.id], false)
+                        })
+                    document
+                        .querySelectorAll('.reg-action')
+                        .forEach(el => {
+                            let reg = el.attributes.reg ? parseInt(el.attributes.reg.nodeValue) : 0;
+                            if (reg == 0) {
+                                return;
+                            }
+                            updateRegValue(el, state['0x' + reg.toString(16)], false)
+                        })
+                })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            
+            
+            // var-value传输的事件触发逻辑与client传输内容定义
+            // Attach default on change action
+            document
+                .querySelectorAll('.default-action')
+                //与getelementbyid获取id名相应的，querySelectorAll获取的是DOM树中所有的class类元素
+                .forEach(el => {
+                    //forEach( all the elements with class=.default-action, do the following)
+                    el.onchange = () => updateConfig(el)
+                    // if el is onchange, then call updateConfig function with el as parameter
+                    // onchange is like the function button.onclick, 
+                    // it's not a real function, but a pointer_name of the function 
+                    // when the event connected to the pointer is triggered{
+                    //  the server use the pointer to find the corresponding function and execute it
+                    //  }
+                    //otherwise, pay attention to the el here used as parameter inside and outside the undefined function
+                })
+
+            function updateConfig(el) {
+                let value
+                switch (el.type) {
+                    case 'checkbox':
+                        value = el.checked ? 1 : 0
+                        break
+                    case 'range':
+                    case 'select-one':
+                        value = el.value
+                        break
+                    case 'button':
+                    case 'submit':
+                        value = '1'
+                        break
+                    default:
+                        return
+                }
+                // 当case内无操作时，继续阅读下一个case，直到遇到break或者switch结束
+                // 多个连续无操作的case语句可以看作是一个整体，满足多个条件时执行同一段代码
+                // 这种用法被称为switch穿透（switch fall-through）
+                // cpp中会警告switch穿透，但js中不会的，这种方法在两个语言中都合法
+
+                const query = `${baseHost}/control?var=${el.id}&val=${value}`
+
+                fetch(query)
+                    .then(response => {
+                        console.log(`request to ${query} finished, status: ${response.status}`)
+                    })
+            }
+
+            document
+                .querySelectorAll('.close')
+                .forEach(el => {
+                    el.onclick = () => {
+                        hide(el.parentNode)
+                    }
+                })
+
+        })
+
+    </script>
+</body>
+
+</html>

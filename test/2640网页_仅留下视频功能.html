@@ -1,0 +1,231 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>ESP32-CAM 视频流</title>
+    <style>
+        body {
+            font-family: Arial,Helvetica,sans-serif;
+            background: #000;
+            color: #fff;
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* 视频窗口容器 */
+        .image-container {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            top: 10%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 8px;
+            z-index: 1;
+        }
+
+        /* 视频流图片 */
+        #stream {
+            display: bottom;
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+
+        /* 关闭按钮 */
+        .close {
+            position: absolute;
+            right: 5px;
+            top: 5px;
+            background: #ff3034;
+            width: 16px;
+            height: 16px;
+            border-radius: 100px;
+            color: #fff;
+            text-align: center;
+            line-height: 18px;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        /* 控制按钮 */
+        #buttons {
+            margin-top: 20px;
+        }
+
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            color: #fff;
+            background: #ff3034;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background: #ff494d;
+        }
+
+        /* 隐藏类 */
+        .hidden {
+            display: none !important;
+        }
+
+        /* 保存按钮 */
+        .save {
+            position: absolute;
+            right: 25px;
+            top: 0px;
+            height: 16px;
+            line-height: 16px;
+            padding: 0 4px;
+            text-decoration: none;
+            cursor: pointer;
+            background: #ff3034;
+            color: #fff;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 视频窗口 -->
+    <figure>
+        <div id="stream-container" class="image-container hidden">
+            <a id="save-still" href="#" class="save" download="capture.jpg">Save</a>
+            <div class="close" id="close-stream">×</div>
+            <img id="stream" src="" crossorigin>
+        </div>
+    </figure>
+
+    <!-- 控制按钮 -->
+    <section id="buttons">
+        <button id="get-still">画面保持</button>
+        <button id="toggle-stream">实时图像数据流传输</button>
+    </section>
+
+    <!-- 极简JavaScript -->
+<script>
+document.addEventListener('DOMContentLoaded', function (event) {
+  var baseHost = document.location.origin
+  var streamUrl = baseHost + ':81'
+
+  // ========== 工具函数 ==========
+  const hide = el => {
+    el.classList.add('hidden')
+  }
+  const show = el => {
+    el.classList.remove('hidden')
+  }
+
+  // 更新UI（仅显示，不发送到服务器）
+  const updateValue = (el, value) => {
+    if (el.type === 'checkbox') {
+      el.checked = !!value
+    } else {
+      el.value = value
+    }
+  }
+
+  // ========== 1. 初始状态读取 ==========
+  // 开机时同步服务器状态到UI
+  fetch(`${baseHost}/status`)
+    .then(function (response) {
+      return response.json()
+    })
+    .then(function (state) {
+      document
+        .querySelectorAll('.default-action')
+        .forEach(el => {
+          updateValue(el, state[el.id])
+        })
+    })
+
+  // ========== 2. 关闭按钮事件 ==========
+  // 专门用来关闭摄像头视频窗口
+  document
+    .querySelectorAll('.close')
+    .forEach(el => {
+      el.onclick = () => {
+        hide(el.parentNode)
+      }
+    })
+
+  // ========== 3. 视频流控制 ==========
+  const view = document.getElementById('stream')
+  const viewContainer = document.getElementById('stream-container')
+  const stillButton = document.getElementById('get-still')
+  const streamButton = document.getElementById('toggle-stream')
+  const closeButton = document.getElementById('close-stream')
+  const saveButton = document.getElementById('save-still')
+
+  // 停止视频流
+  const stopStream = () => {
+    window.stop();
+    streamButton.innerHTML = '实时图像数据流传输'
+  }
+
+  // 开始视频流
+  const startStream = () => {
+    view.src = `${streamUrl}/stream`
+    show(viewContainer)
+    streamButton.innerHTML = '停止图像传输'
+  }
+
+  // 拍照按钮：捕获单帧
+  stillButton.onclick = () => {
+    stopStream()
+    view.src = `${baseHost}/capture?_cb=${Date.now()}`
+    show(viewContainer)
+  }
+
+  // 关闭视频窗口按钮
+  closeButton.onclick = () => {
+    stopStream()
+    hide(viewContainer)
+  }
+
+  // 开始/停止流传输切换
+  streamButton.onclick = () => {
+    const streamEnabled = streamButton.innerHTML === '停止图像传输'
+    if (streamEnabled) {
+      stopStream()
+    } else {
+      startStream()
+    }
+  }
+
+  // 保存图片按钮
+  saveButton.onclick = () => {
+    var canvas = document.createElement("canvas")
+    canvas.width = view.width
+    canvas.height = view.height
+    document.body.appendChild(canvas)
+    var context = canvas.getContext('2d')
+    context.drawImage(view, 0, 0)
+    try {
+      var dataURL = canvas.toDataURL('image/jpeg')
+      saveButton.href = dataURL
+      var d = new Date()
+      saveButton.download = d.getFullYear() + 
+        ("0"+(d.getMonth()+1)).slice(-2) + 
+        ("0" + d.getDate()).slice(-2) + 
+        ("0" + d.getHours()).slice(-2) + 
+        ("0" + d.getMinutes()).slice(-2) + 
+        ("0" + d.getSeconds()).slice(-2) + ".jpg"
+    } catch (e) {
+      console.error(e)
+    }
+    canvas.parentNode.removeChild(canvas)
+  }
+})
+</script>
+</body>
+</html>

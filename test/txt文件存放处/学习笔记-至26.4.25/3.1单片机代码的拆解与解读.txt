@@ -1,0 +1,263 @@
+# 服务器 + 固件末端执行器
+首先需要明确的一点是,我们的ESP32CAM并不是单纯的单片机或者单纯的服务器
+而是一个**服务器 + 固件末端执行器**混合的玩意\
+这就导致了源代码写得有点"乱"\
+
+所以理解源代码的第一步,就是功能分离(后期可能的话还要做文件分割,做结构重构用来规范化代码)
+
+# 服务器部分
+承接我们之前写的前端代码,我们首先讲解服务器以及处理函数的注册
+```cpp
+void startCameraServer()
+{
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.max_uri_handlers = 16;
+    // 注意如果要专门写一个其他域的path+handler的时候,不能超过这个最大允许handler的个数(或者你把他改大一些也行)
+
+    httpd_uri_t index_uri = {
+        .uri = "/",
+        .method = HTTP_GET,
+        .handler = index_handler,
+        .user_ctx = NULL
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+        ,
+        .is_websocket = true,
+        .handle_ws_control_frames = false,
+        .supported_subprotocol = NULL
+#endif
+    };
+
+    httpd_uri_t status_uri = {
+        .uri = "/status",
+        .method = HTTP_GET,
+        .handler = status_handler,
+        .user_ctx = NULL
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+        ,
+        .is_websocket = true,
+        .handle_ws_control_frames = false,
+        .supported_subprotocol = NULL
+#endif
+    };
+
+    httpd_uri_t cmd_uri = {
+        .uri = "/control",
+        .method = HTTP_GET,
+        .handler = cmd_handler,
+        .user_ctx = NULL
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+        ,
+        .is_websocket = true,
+        .handle_ws_control_frames = false,
+        .supported_subprotocol = NULL
+#endif
+    };
+
+    httpd_uri_t capture_uri = {
+        .uri = "/capture",
+        .method = HTTP_GET,
+        .handler = capture_handler,
+        .user_ctx = NULL
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+        ,
+        .is_websocket = true,
+        .handle_ws_control_frames = false,
+        .supported_subprotocol = NULL
+#endif
+    };
+
+    httpd_uri_t stream_uri = {
+        .uri = "/stream",
+        .method = HTTP_GET,
+        .handler = stream_handler,
+        .user_ctx = NULL
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+        ,
+        .is_websocket = true,
+        .handle_ws_control_frames = false,
+        .supported_subprotocol = NULL
+#endif
+    };
+
+    httpd_uri_t bmp_uri = {
+        .uri = "/bmp",
+        .method = HTTP_GET,
+        .handler = bmp_handler,
+        .user_ctx = NULL
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+        ,
+        .is_websocket = true,
+        .handle_ws_control_frames = false,
+        .supported_subprotocol = NULL
+#endif
+    };
+
+    httpd_uri_t xclk_uri = {
+        .uri = "/xclk",             
+        .method = HTTP_GET,
+        .handler = xclk_handler,    
+        .user_ctx = NULL
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+        ,
+        .is_websocket = true,
+        .handle_ws_control_frames = false,
+        .supported_subprotocol = NULL
+#endif
+    };
+
+    httpd_uri_t reg_uri = {
+        .uri = "/reg",
+        .method = HTTP_GET,
+        .handler = reg_handler,
+        .user_ctx = NULL
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+        ,
+        .is_websocket = true,
+        .handle_ws_control_frames = false,
+        .supported_subprotocol = NULL
+#endif
+    };
+
+    httpd_uri_t greg_uri = {
+        .uri = "/greg",
+        .method = HTTP_GET,
+        .handler = greg_handler,
+        .user_ctx = NULL
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+        ,
+        .is_websocket = true,
+        .handle_ws_control_frames = false,
+        .supported_subprotocol = NULL
+#endif
+    };
+
+    httpd_uri_t pll_uri = {
+        .uri = "/pll",
+        .method = HTTP_GET,
+        .handler = pll_handler,
+        .user_ctx = NULL
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+        ,
+        .is_websocket = true,
+        .handle_ws_control_frames = false,
+        .supported_subprotocol = NULL
+#endif
+    };
+
+    httpd_uri_t win_uri = {
+        .uri = "/resolution",
+        .method = HTTP_GET,
+        .handler = win_handler,
+        .user_ctx = NULL
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+        ,
+        .is_websocket = true,
+        .handle_ws_control_frames = false,
+        .supported_subprotocol = NULL
+#endif
+    };
+
+    log_i("Starting web server on port: '%d'", config.server_port);
+    if (httpd_start(&camera_httpd, &config) == ESP_OK)
+    {
+        httpd_register_uri_handler(camera_httpd, &index_uri);
+        httpd_register_uri_handler(camera_httpd, &cmd_uri);
+        httpd_register_uri_handler(camera_httpd, &status_uri);
+        httpd_register_uri_handler(camera_httpd, &capture_uri);
+        httpd_register_uri_handler(camera_httpd, &bmp_uri);
+
+        httpd_register_uri_handler(camera_httpd, &xclk_uri);
+        httpd_register_uri_handler(camera_httpd, &reg_uri);
+        httpd_register_uri_handler(camera_httpd, &greg_uri);
+        httpd_register_uri_handler(camera_httpd, &pll_uri);
+        httpd_register_uri_handler(camera_httpd, &win_uri);
+    }
+
+    // 注意下面的是stream视频流的端口
+    config.server_port += 1;
+    config.ctrl_port += 1;
+    log_i("Starting stream server on port: '%d'", config.server_port);
+    if (httpd_start(&stream_httpd, &config) == ESP_OK)
+    {
+        httpd_register_uri_handler(stream_httpd, &stream_uri);
+    }
+}
+```
+
+首先明确,我们区分不同功能的标识符是\
+```URI：（全称：Uniform Resource Identifier）```**统一资源标识符**\
+每一个对应的.uri都是一条path,并且会绑定一个专门的handler\
+这种path+handler的模式用于区分不同的**命令**,并给相应的命令绑定上一个**专用的处理函数**
+然后对应命令传输端口和视频流端口分别有
+1. 命令信息端口80注册表
+    ```cpp
+    // 使用默认链接端口与端口状态
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    // 注册路径与处理函数
+    httpd_uri_t test_uri = {
+        .uri = "/test",         //对应域名大类
+        .method = HTTP_GET,     //所发送的请求类型(注意后面如果为了规范性全改POST的话这里也要改)
+        .handler = test_handler,//所绑定的处理函数 
+        .user_ctx = NULL        //这里的ctx是一个全局指针变量,可以用来装一些传递给test_handler的数据
+    #ifdef CONFIG_HTTPD_WS_SUPPORT
+        ,
+        .is_websocket = true,               //websocket1.0协议
+        .handle_ws_control_frames = false,  //连接状态与连接帧控制是否由服务器本地决定
+        .supported_subprotocol = NULL       //不添加额外的支持协议
+    #endif
+    // CONFIG_HTTPD_WS_SUPPORT的if定义的这一段源代码中更本没有启用,删掉也没事
+        };
+
+    httpd_uri_t wzt_uri = {
+        .uri = "/wzt",
+        .method = HTTP_GET,
+        .handler = wzt_handler,
+        .user_ctx = NULL
+    }
+
+    httpd_uri_t motion_uri = {...}
+    httpd_uri_t PWM_uri = {...}
+    ...
+    ```
+    紧接着用httpd_register_uri_handler完成注册
+    ```cpp
+    log_i("Starting web server on port: '%d'", config.server_port);
+    httpd_handle_t camera_httpd = NULL;
+    if (httpd_start(&camera_httpd, &config) == ESP_OK)
+    // 将config的数据写入camera_httpd中并作为服务器配置启动
+    {
+        httpd_register_uri_handler(camera_httpd, &test_uri);
+        httpd_register_uri_handler(camera_httpd, &wzt_uri);
+        httpd_register_uri_handler(camera_httpd, &motion_uri);
+        httpd_register_uri_handler(camera_httpd, &PWM_uri);
+        ...
+    }
+    ```
+2. stream视频数据流端口81注册
+    ```cpp
+    //先绑定stream的handler与uri
+    httpd_uri_t stream_uri = {
+        .uri = "/stream",
+        .method = HTTP_GET,
+        .handler = stream_handler,
+        .user_ctx = NULL
+    };
+    ```
+    然后绑定端口号
+    ```cpp
+    config.server_port += 1;
+    config.ctrl_port += 1;
+    // 将config的服务于控制端口+1, 也就是
+    //config.server_port + 1 = 81, 
+    //config.ctrl_port + 1 = 32769, 
+    log_i("Starting stream server on port: '%d'", config.server_port);
+    if (httpd_start(&stream_httpd, &config) == ESP_OK)
+    // 同样将config的数据写入stream_httpd中并作为服务器配置启动
+    {
+        httpd_register_uri_handler(stream_httpd, &stream_uri);
+        //注册表中只有一条命令,也是81号端口专门负责的功能:数据流图传
+    }
+    ```
+
+
+

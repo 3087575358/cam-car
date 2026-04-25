@@ -1,0 +1,425 @@
+我之前的内容都能一个标题概括干嘛
+唯独这个直接使用函数,
+就是为了干爽的直接给你讲清楚视频流在单片机上的硬件逻辑
+
+# 代码处理的第一步:化简——留下核心功能
+咱们的小车暂时只需要图传,所以首先明确
+1. 咱们不需要 **人脸识别功能**,所以所有有关```FACE_RECOGNITION```的```#if 和 #ifdef```全部删除
+2. 其次就是我们这里只对硬件的核心操作负责,而不关心网络层连接错误导致的问题,所以
+有关网络错误导致的```errorcode=500,errorcode=404,等等```网络错误返回码的部分, 统一删除
+3. 我们只关心线性的执行流程,以及对应的主要函数,而不需要设置繁杂的固件错误日志\
+代码固件执行失败导致的```ESP_FAIL```的返回内容, 一样删掉
+4. 在非调试模式下```ARDUHAL_LOG_LEVEL < ARDUHAL_LOG_LEVEL_INFO```,\
+平滑器```ra_filter_run```不会启动,所以有关语句一起删除
+
+
+```cpp
+static esp_err_t stream_handler(httpd_req_t *req)
+{
+    camera_fb_t *fb = NULL;
+    struct timeval _timestamp;
+    esp_err_t res = ESP_OK;
+    size_t _jpg_buf_len = 0;
+    uint8_t *_jpg_buf = NULL;
+    char *part_buf[128];
+
+    static int64_t last_frame = 0;
+    if (!last_frame)
+    {
+        last_frame = esp_timer_get_time();
+    }
+
+    res = httpd_resp_set_type(req, _STREAM_CONTENT_TYPE);
+    //100行
+    //static const char *_STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
+
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    //依旧全域访问权
+    httpd_resp_set_hdr(req, "X-Framerate", "60");
+    //设置默认帧率X-Framerate为60fps
+
+#if CONFIG_LED_ILLUMINATOR_ENABLED
+    isStreaming = true;
+    enable_led(true);
+#endif
+
+    while (true)
+    {
+        fb = esp_camera_fb_get();
+        {
+            _timestamp.tv_sec = fb->timestamp.tv_sec;
+            _timestamp.tv_usec = fb->timestamp.tv_usec;
+
+            if (fb->format != PIXFORMAT_JPEG)
+            {
+                // 如果录像格式不是jpg,则强行转换
+                bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
+                esp_camera_fb_return(fb);
+                fb = NULL;
+            }
+            else
+            {
+                _jpg_buf_len = fb->len;
+                _jpg_buf = fb->buf;
+            }
+        }
+        if (res == ESP_OK)
+        {
+            res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
+        }
+        if (res == ESP_OK)
+        {
+            size_t hlen = snprintf((char *)part_buf, 128, _STREAM_PART, _jpg_buf_len, _timestamp.tv_sec, _timestamp.tv_usec);
+            // snprintf和printf没啥关系，前者是纯赋值，后者是终端输出
+            // snprintf(buffer, 100, "WZT_CATTY");  // 不会在终端显示任何内容！
+            // 会刷新buffer前100位的内容，然后把 "WZT_CATTY" 写入 buffer 数组中，写入 99 个字符，并在末尾添加一个 null 字符。
+            res = httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
+        }
+        if (res == ESP_OK)
+        {
+            res = httpd_resp_send_chunk(req, (const char *)_jpg_buf, _jpg_buf_len);
+        }
+
+        if (fb)
+        {
+            esp_camera_fb_return(fb);
+            fb = NULL;
+            _jpg_buf = NULL;
+        }
+        else if (_jpg_buf)
+        {
+            free(_jpg_buf);
+            _jpg_buf = NULL;
+        }
+        int64_t fr_end = esp_timer_get_time();
+        int64_t frame_time = fr_end - last_frame;
+        frame_time /= 1000;
+        // 妈的傻逼作者,能重新命名的东西投篮直接用frame_time /= 1000;数据管理好比蒙古海军
+        // int64_t reprt_time = frame_time / 1000;
+
+        log_i("MJPG: %uB %ums (%.1ffps), AVG: %ums (%.1ffps)",
+                 (uint32_t)(_jpg_buf_len),
+                 (uint32_t)frame_time, 1000.0 / (uint32_t)frame_time,
+                 avg_frame_time, 1000.0 / avg_frame_time);
+    }
+
+#if CONFIG_LED_ILLUMINATOR_ENABLED
+    isStreaming = false;
+    enable_led(false);
+#endif
+
+    return res;
+}
+```
+剩下100行代码不到,我们慢慢来看
+
+
+
+
+
+
+
+
+# 时间轴 与 相对时间(及其命名规律)
+    作者之前有写过一个matlab模拟多智能体运动的论文代码复现
+    里面的总时间设计可能是20s,30s
+    但是对应每一次只能提的位置更新的间隔时间不可能以s秒来作为计算单位
+    通常是0.001s也就是1ms,那么我就称这个1ms为我的步长
+    相对的,这种单位设置的方式在许多详谬中都很常见:
+    ```
+        我的时间计数器可能是32678(也就是我的程序的循环次数k=32678)
+        但如果我对应的循环一次设置的步长为1ms
+        那次是的时间就应该是t=32678/T=32.678s
+    ```
+在此基础上
+```cpp
+static int64_t last_frame = 0;
+    if (!last_frame)
+    {
+        last_frame = esp_timer_get_time();
+        // 这里的last_frame纯是瞎取名, 实际上这个值是每次开机第一次连接时"起始时间"
+        // 采取类似于坐标原点的逻辑,使用origin_frame的取名逻辑更合适
+        // 又或者采取一个更直接的逻辑stream_start_time
+    }
+```
+```cpp
+while (true)
+    {
+        fb = esp_camera_fb_get();
+        {
+            _timestamp.tv_sec = fb->timestamp.tv_sec;
+            _timestamp.tv_usec = fb->timestamp.tv_usec;
+            // 这里需要说明一下计算机采用的Unix 纪元（Unix Epoch）
+            // 或者用更常见的中文名1970读秒计数法
+            // 即单片机内部的时间实际上采用的是一个原点设在1970.1.1 GMT+00:00:00
+            // 的时间, 然后我们在Unix Epoch下的事件传递,都是使用的直接累计秒钟数来统计时间
+            // 例如2026-04-23T21:59:00.456Z（ISO 8601）
+            // 换算成秒钟的话2026-04-23T21:59:00 - 1970.1.1 GMT+00:00:00 一共过了多少秒
+            // 最后的结果是timestamp.tv_sec = 1745418780;
+            // 如果你不知道这是UNIX Epoch,而直接用公历计数法解析年月日,你大概会以为这是1745乾隆年间发来的http报文...
+            // 至于tv_usec,简单易懂,秒之后的进度如果有要求的话,就是微妙us
+
+        }
+                if (res == ESP_OK)
+        {
+            size_t hlen = snprintf((char *)part_buf, 128, _STREAM_PART, _jpg_buf_len, _timestamp.tv_sec, _timestamp.tv_usec);
+            // snprintf和printf没啥关系，前者是纯赋值，后者是终端输出
+            // snprintf(buffer, 100, "WZT_CATTY");  // 不会在终端显示任何内容！
+            // 会刷新buffer前100位的内容，然后把 "WZT_CATTY" 写入 buffer 数组中，写入 99 个字符，并在末尾添加一个 null 字符。
+            // 同时返回的值是对应part_buf数据长度的int值
+            // 例如上面这个part_buf
+            // Content-Type: image/jpeg\r\nContent-Length: 15360\r\nX-Timestamp: 1745418780.456789\r\n\r\n
+            // "Content-Type: image/jpeg\r\n" = 28
+            // "Content-Length: 15360\r\n" = 23
+            // "X-Timestamp: 1745418780.456789\r\n" = 38
+            // "\r\n" = 2
+            //四个字符串(格式声明+内容大小+unix时间+微秒时间)+四个换行符\r\n(每个字符串末尾一个,报文结束再加一个)
+            // 最后size_t hlen = int 91 (数据类型最好做个强制转换,当然这里不做也没事)
+            res = httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
+            //发送这一帧图片数据
+        }
+        int64_t fr_end = esp_timer_get_time();  // 获取一下现在什么时间
+        int64_t frame_time = fr_end - last_frame; // 两个时间做差, 读取这一帧的拍摄时间
+        frame_time /= 1000; // us级单位的时间减去后三位就是毫秒精度
+        // 妈的傻逼作者,能重新命名的东西投篮直接用frame_time /= 1000;数据管理好比蒙古海军
+        // int64_t reprt_time = frame_time / 1000;
+
+        log_i("MJPG: %uB %ums (%.1ffps), AVG: %ums (%.1ffps)",
+                 (uint32_t)(_jpg_buf_len),
+                 (uint32_t)frame_time, 1000.0 / (uint32_t)frame_time,
+                 avg_frame_time, 1000.0 / avg_frame_time);
+        // 任务日志
+    }
+```
+理解这些时间所指代的意义
+是整个代码中最重要的问题
+
+
+
+
+
+
+
+
+
+
+
+---
+
+然后的问题就比较简单了
+# 报文设置
+```cpp
+res = httpd_resp_set_type(req, _STREAM_CONTENT_TYPE);
+//100行
+//static const char *_STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
+
+httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+//依旧全域访问权
+httpd_resp_set_hdr(req, "X-Framerate", "60");
+//设置默认帧率X-Framerate为60fps
+```
+至此,req未被发送,但是已经被打上了报头
+```http
+Content-Type: multipart/x-mixed-replace;boundary=123456789000000000000987654321
+Access-Control-Allow-Origin: *
+X-Framerate: 60
+\r\n
+```
+
+
+然后进入视频流的循环
+```cpp
+while(true){    
+// 其实这里用res == ESP_OK更好
+// 这样网络错误的话不会导致图传乱码以及单片机资源卡在这个while里面一直转
+if (res == ESP_OK)
+    {
+        res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
+//至此发送第一条报文并开始图传
+// HTTP/1.1 200 OK
+// Content-Type: multipart/x-mixed-replace;boundary=123456789000000000000987654321
+// Access-Control-Allow-Origin: *
+// X-Framerate: 60
+// \r\n
+// --123456789000000000000987654321         ← _STREAM_BOUNDARY
+// \r\n 
+    }
+    if (res == ESP_OK)
+    {
+        size_t hlen = snprintf((char *)part_buf, 128, _STREAM_PART, _jpg_buf_len, _timestamp.tv_sec, _timestamp.tv_usec);
+        res = httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
+//第2(3n+2)条报文:格式+内容大小+拍摄时间
+// Content-Type: image/jpeg\r\n                  ← _STREAM_PART (hlen=这部分长度)
+// Content-Length: 15360\r\n
+// X-Timestamp: 1745418780.456789\r\n
+// \r\n
+    }
+    if (res == ESP_OK)
+    {
+        res = httpd_resp_send_chunk(req, (const char *)_jpg_buf, _jpg_buf_len);
+//第三(3n+3)条报文: 图片内容(具体的像素值)
+// [15360 字节的 JPEG 二进制数据]                  ← _jpg_buf
+    }
+}
+```
+
+之后继续循环,(从报头开始)发送的数据流如下
+```http
+HTTP/1.1 200 OK
+Content-Type: multipart/x-mixed-replace;boundary=123456789000000000000987654321
+Access-Control-Allow-Origin: *
+X-Framerate: 60\r\n
+--123456789000000000000987654321         ← _STREAM_BOUNDARY
+\r\n 
+Content-Type: image/jpeg\r\n                  ← _STREAM_PART (hlen=这部分长度)
+Content-Length: 15360\r\n
+X-Timestamp: 1745418780.456789\r\n
+\r\n
+[第1张图片: 15360 字节的 JPEG 二进制数据]                  ← _jpg_buf
+\r\n                                          ← 显式分隔
+
+--123456789000000000000987654321         ← _STREAM_BOUNDARY
+\r\n 
+Content-Type: image/jpeg\r\n                  ← _STREAM_PART (hlen=这部分长度)
+Content-Length: 15360\r\n
+X-Timestamp: 1745418780.456789\r\n
+\r\n
+[第2张图片: 15360 字节的 JPEG 二进制数据]                  ← _jpg_buf
+\r\n                                          ← 显式分隔
+
+--123456789000000000000987654321         ← _STREAM_BOUNDARY
+\r\n 
+Content-Type: image/jpeg\r\n                  ← _STREAM_PART (hlen=这部分长度)
+Content-Length: 15360\r\n
+X-Timestamp: 1745418780.456789\r\n
+\r\n
+[第3张图片: 15360 字节的 JPEG 二进制数据]                  ← _jpg_buf
+\r\n                                          ← 显式分隔
+
+...
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 内存管理上的一个小风险
+```cpp
+if (fb)
+{
+    esp_camera_fb_return(fb);
+    fb = NULL;
+    _jpg_buf = NULL;
+}
+else if (_jpg_buf)
+{
+    free(_jpg_buf);
+    _jpg_buf = NULL;
+}
+```
+首先明确的一点是,如果你的固件读取出来的格式就是jpg格式,那么你完全没有必要
+```cpp
+定义数据暂存buf
+size_t _jpg_buf_len = 0;
+uint8_t *_jpg_buf = NULL;
+并强制数据转换
+fb->format != PIXFORMAT_JPEG
+```
+而是应该直接
+```cpp
+while(true){
+    if (res == ESP_OK)
+    {
+        res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
+        size_t hlen = snprintf((char *)part_buf, 128, _STREAM_PART, fb->len, fb->timestamp.tv_sec, fb->timestamp.tv_usec);
+        res = httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
+        res = httpd_resp_send_chunk(req, (const char *)fb->buf, fb->len);
+    }
+}
+// 可能涉及到出具类型转换的一些小问题,像原来的函数一样直接强行转就可以了
+```
+那你就要问了: 原函数写这一堆buf拿来干甚? 这不是空耗运行内存吗?
+
+    如果说我全程都一定使用的有且只有一种格式也就是jpeg
+    我完全可以这么做
+    问题就在于狗操的esp32cam为了宣传效果,写了一堆人脸识别的功能
+    只要你稍微有点opencv的基础,
+    就知道任何人工智能的图片数据识别一定是以RGB三原色为基础进行的
+    对应的
+    原函数中的一大堆人脸识别功能, 就是需要RGB格式作为基础的
+    但是我们的图像传输可是使用的jpeg格式
+    那这个数据转换怎么办呢?
+
+所以你可以看到他用了一堆及其别扭的buf和#if, 丑陋的无以复加
+
+而且还用到了free这个函数来进行释放操作\
+一般在有规范的内存池管理的数据库下,这没什么问题\
+但是tm这是一个运行内存只有4MB的单片机. 一大堆的暂存数据挨着彼此放在这\
+**free这玩意执行的不是软件DMA层面的数据管理模式**\
+**而是根据硬件块的NAND分区来标记可用状态的**\
+你的free要是一不小心发现这一块NAND的head状态没有标记(但是实际上这块NAND里面暂时存放了一堆数据)\
+你猜猜会发生什么?嗯?
+
+
+# 另外一些规范化的小问题
+至于原来的语句为什么每一次
+```httpd_resp_send_chunk```
+和
+```httpd_resp_send```
+的时候都要问下```ESP_OK```的状态,是因为网络连接的不稳定性
+一旦网络连接断了,可以及时的直接返回避免返回一堆无意义的乱码或者跳过内存清楚操作导致爆内存
+
+
+----
+综上,给出我的
+# 最终修改建议
+代码如下
+```cpp
+\\ code_version_0.1.8
+static esp_err_t stream_handler(httpd_req_t *req)
+{
+    camera_fb_t *fb = NULL;
+    esp_err_t res = ESP_OK;
+    char *part_buf[128];
+
+    static int64_t origin_frame_time = 0;
+    if (!origin_frame_time)
+    {
+        origin_frame_time = esp_timer_get_time();
+    }
+
+    httpd_resp_set_type(req, _STREAM_CONTENT_TYPE);
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_set_hdr(req, "X-Framerate", "60");
+
+    while (ESP_OK){
+        fb = esp_camera_fb_get();// 记得确保esp_camera的原始格式设置一定要是jpeg格式
+        size_t hlen = snprintf((char *)part_buf, 128, _STREAM_PART, fb->len, fb->timestamp.tv_sec, fb->timestamp.tv_usec);
+
+        httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
+        httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
+        httpd_resp_send_chunk(req, (const char *)fb->buf, fb->len);
+
+        int64_t current_frame_time = esp_timer_get_time();
+        int64_t capture_time = current_frame_time - origin_frame_time;
+        capture_time /= 1000;   //根据单位来选择是否要除
+
+        log_i("MJPG: %uB %ums (%.1ffps)",
+                 (uint32_t)(fb->len),
+                 (uint32_t)capture_time, 1000.0 / (uint32_t)capture_time);
+    }
+    return 1;
+}
+```
+清爽, 没有人脸识别, 没有一句废话
+可能需要小修一下数据格式
+要是代码跑不通出了问题,就恢复成原来的写法,并进入调试状态找硬件问题
