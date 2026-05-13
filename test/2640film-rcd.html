@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>ESP32-CAM MP4 Recorder</title>
+    <style>
+        #preview { width: 640px; height: 480px; background: #333; }
+        #status { font-family: monospace; margin: 10px 0; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+
+
+<body>
+  <h2>ESP32-CAM WebCodecs 录制器</h2>
+
+  <!-- 预览用 img (MJPEG 流) -->
+  <img id="preview" src="http://192.168.4.1:81/stream" alt="Stream">
+
+  <div>
+    <button onclick="startRecording()">⏺ 开始录制 (MP4)</button>
+    <button onclick="stopRecording()">⏹ 停止并下载</button>
+  </div>
+
+  <div id="status">未录制</div>
+
+  <!-- 引入 MP4Box.js -->
+  <!-- 
+  <script src="https://cdn.jsdelivr.net/npm/mp4box@0.5.3/dist/mp4box.all.min.js"></script>
+  <script src="recorder.js"></script> 
+  -->
+</body>
+
+</html>
